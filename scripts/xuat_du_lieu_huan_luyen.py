@@ -23,8 +23,9 @@ import sys
 from datetime import datetime, timezone
 from io import BytesIO
 
-# Chạy được bằng `python scripts/xuat_du_lieu_huan_luyen.py`: đưa thư mục gốc dự án vào
-# sys.path để import được setup_database và app (import bên trong xuat()).
+# Chạy được từ bất kỳ thư mục nào: đưa thư mục gốc dự án vào sys.path để import được
+# setup_database và app (import bên trong xuat()); database, thư mục ảnh và nhật ký xuất luôn
+# tính từ gốc dự án. Riêng --ra là tham số dòng lệnh nên theo thư mục đang đứng, như mọi CLI.
 GOC_DU_AN = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if GOC_DU_AN not in sys.path:
     sys.path.insert(0, GOC_DU_AN)
@@ -35,7 +36,9 @@ from dotenv import load_dotenv  # noqa: E402
 # chỉ được import bên trong xuat(). Không tự nạp thì THU_MUC_NHAT_KY_XUAT trong .env bị bỏ
 # qua âm thầm và nhật ký nằm ở thư mục mặc định — đúng thứ cần tìm lại khi gia đình rút đồng thuận.
 load_dotenv()
-THU_MUC_NHAT_KY = os.getenv("THU_MUC_NHAT_KY_XUAT", "data/nhat_ky_xuat")
+# Đường dẫn tương đối tính từ gốc dự án (giống setup_database.duong_dan_du_an), không từ thư mục
+# đang đứng: nhật ký phải luôn nằm một chỗ để còn tìm lại được.
+THU_MUC_NHAT_KY = os.path.normpath(os.path.join(GOC_DU_AN, os.getenv("THU_MUC_NHAT_KY_XUAT", "data/nhat_ky_xuat")))
 
 
 class ThuMucKhongTrong(RuntimeError):
@@ -57,7 +60,7 @@ def xuat(thu_muc_ra: str, db=None, thu_muc_nhat_ky: str = None) -> dict:
     from PIL import Image
 
     from setup_database import SessionLocal
-    from app.api.records import UPLOAD_DIR
+    from app.api.records import UPLOAD_DIR, duong_dan_anh_that
     from app.services import lam_sach_anh, xuat_du_lieu
 
     khoa = xuat_du_lieu.lay_khoa()      # thiếu khoá thì nổ ở đây, chưa chạm vào file nào
@@ -81,16 +84,19 @@ def xuat(thu_muc_ra: str, db=None, thu_muc_nhat_ky: str = None) -> dict:
     tom_tat = {"da_xuat": 0, "bo_qua_thieu_file": 0, "bo_qua_ngoai_thu_muc": 0}
 
     for ca in cac_ca:
+        # Cùng cách tính đường dẫn ảnh với endpoint trả ảnh: kết quả xuất không phụ thuộc thư
+        # mục đang đứng, kể cả với ca cũ lưu image_path tương đối.
+        duong_anh = duong_dan_anh_that(ca["image_path"])
         # Cùng chốt với endpoint trả ảnh: image_path nằm trong database, và một dòng bị sửa
         # không được phép lôi một file bất kỳ trên máy chủ vào tập dữ liệu gửi đi.
-        if not _nam_trong(UPLOAD_DIR, ca["image_path"]):
+        if not _nam_trong(UPLOAD_DIR, duong_anh):
             tom_tat["bo_qua_ngoai_thu_muc"] += 1
             continue
-        if not os.path.isfile(ca["image_path"]):
+        if not os.path.isfile(duong_anh):
             tom_tat["bo_qua_thieu_file"] += 1
             continue
 
-        with open(ca["image_path"], "rb") as f:
+        with open(duong_anh, "rb") as f:
             du_lieu = f.read()
         # Ảnh upload đã được làm sạch, nhưng ảnh cũ hay ảnh khôi phục từ sao lưu thì chưa
         # chắc. Tập dữ liệu rời khỏi hệ thống nên phải kiểm lại, không tin giả định.
@@ -99,7 +105,7 @@ def xuat(thu_muc_ra: str, db=None, thu_muc_nhat_ky: str = None) -> dict:
                 du_lieu = lam_sach_anh.lam_sach(du_lieu)
 
         ma_anh = xuat_du_lieu.ma_an_danh("anh", ca["record_id"], khoa)
-        duoi = os.path.splitext(ca["image_path"])[1].lower()
+        duoi = os.path.splitext(duong_anh)[1].lower()
         ten_file = f"{ma_anh}{duoi}"
         with open(os.path.join(thu_muc_anh, ten_file), "wb") as f:
             f.write(du_lieu)

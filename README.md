@@ -16,7 +16,7 @@ Mô hình học sâu phân loại ảnh và XAI thuộc repo riêng của thành
   - chặn phán quyết phân luồng;
   - lưới cảnh báo dấu hiệu nguy hiểm;
   - chuẩn hoá về văn bản thường.
-- **Kiểm thử:** 450 kiểm tra tự động, không cần mạng hay khoá API.
+- **Kiểm thử:** 454 kiểm tra tự động, không cần mạng hay khoá API.
 - **Chưa nối mô hình phân loại ảnh.** Backend đã có sẵn các endpoint `inference-*` cho worker suy luận, xác thực bằng `X-Service-Token`. Khi mô hình sẵn sàng, worker chỉ cần gọi các endpoint này.
 - **Đánh giá trên Gemini thật mới đo được một phần**, do hạn mức ngày của gói miễn phí. Kết quả đã đo nằm trong `outputs/ket_qua_llm/`.
 - **Mọi dữ liệu trong repo là dữ liệu kiểm thử tự tạo.** Không có dữ liệu bệnh nhân thật.
@@ -50,7 +50,7 @@ pediatric-gastro-ai-assistant/
 │   ├── don_du_lieu_qua_han.py       # Dọn tin nhắn quá hạn, token hết hạn (cron)
 │   └── xuat_du_lieu_huan_luyen.py   # Xuất dữ liệu huấn luyện ẩn danh cho phần mô hình
 ├── tests/
-│   └── verify_task.py       # 450 kiểm tra tự động (38 mục), chạy trên DB và thư mục tạm
+│   └── verify_task.py       # 454 kiểm tra tự động (38 mục), chạy trên DB và thư mục tạm
 ├── danh_gia/                # Đánh giá
 │   ├── eval_agent.py        # 8 kịch bản trên Gemini thật (tốn hạn mức)
 │   └── danh_gia_luoi_canh_bao.py    # Lưới cảnh báo trên 67 câu có nhãn, so với 2 chiến lược khác
@@ -90,7 +90,7 @@ Sao chép `.env.example` thành `.env` rồi điền giá trị:
 
 ## Cách chạy
 
-Mọi lệnh chạy từ thư mục gốc repo. Với pip, bỏ tiền tố `uv run`.
+Các lệnh dưới đây viết cho thư mục gốc repo; với pip, bỏ tiền tố `uv run`. Database, thư mục ảnh và nhật ký xuất luôn được tính từ gốc dự án, kể cả khi đặt đường dẫn tương đối trong `.env`. Vì vậy chạy script từ thư mục khác, hay bằng nút Run của IDE, vẫn dùng đúng dữ liệu.
 
 Khởi tạo database (tạo `data/bitss_clinic.db`). Chạy lại mỗi khi cập nhật phiên bản:
 
@@ -118,7 +118,7 @@ Sau đó mở tài liệu API tương tác tại <http://127.0.0.1:8000/docs>. N
 uv run python tests/verify_task.py
 ```
 
-Bộ kiểm tra tự dựng database tạm và mô hình giả. Nó không cần mạng, không cần khoá API, và không đụng vào `data/`. Kết quả mong đợi là `450/450 PASS`.
+Bộ kiểm tra tự dựng database tạm và mô hình giả. Nó không cần mạng, không cần khoá API, và không đụng vào `data/`. Kết quả mong đợi là `454/454 PASS`.
 
 Để kiểm tra tĩnh mã nguồn (pyflakes cùng các lỗi cơ bản của pycodestyle), chạy:
 

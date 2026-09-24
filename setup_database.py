@@ -16,9 +16,34 @@ from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 # load_dotenv() không ghi đè biến môi trường đã có, nên test gán DATABASE_URL trước vẫn thắng.
 load_dotenv()
 
+# Gốc dự án là thư mục chứa file này. Đường dẫn TƯƠNG ĐỐI trong cấu hình — giá trị mặc định lẫn
+# giá trị đặt trong .env — được tính từ đây chứ không từ thư mục đang đứng, nên máy chủ và mọi
+# script chạy từ đâu cũng dùng đúng một database và một thư mục ảnh. Trước đây chạy
+# scripts/create_clinician.py với thư mục làm việc là scripts/ (mặc định của PyCharm) báo
+# "unable to open database file"; trước khi có data/ còn tệ hơn: lặng lẽ tạo một database rỗng
+# mới ngay tại thư mục đang đứng, và tài khoản vừa tạo nằm ở đó chứ không ở database của máy chủ.
+GOC_DU_AN = os.path.dirname(os.path.abspath(__file__))
+
+
+def duong_dan_du_an(duong_dan: str) -> str:
+    """Đường dẫn tuyệt đối: giữ nguyên nếu đã tuyệt đối, ngược lại tính từ gốc dự án."""
+    return os.path.normpath(os.path.join(GOC_DU_AN, duong_dan))
+
+
+def _url_sqlite_tu_goc_du_an(url: str) -> str:
+    """sqlite:///<đường dẫn tương đối> -> đường dẫn tính từ gốc dự án. URL khác giữ nguyên."""
+    tien_to = "sqlite:///"
+    if not url.startswith(tien_to):
+        return url
+    duong_dan = url[len(tien_to):]
+    if duong_dan in ("", ":memory:") or duong_dan.startswith("file:") or os.path.isabs(duong_dan):
+        return url
+    return tien_to + duong_dan_du_an(duong_dan).replace("\\", "/")
+
+
 # Cho phép override để test chạy trên database tạm, không đụng vào DB thật. Mặc định nằm trong
 # data/ cùng ảnh tải lên: mọi dữ liệu thật dồn về một thư mục không bao giờ được commit.
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/bitss_clinic.db")
+DATABASE_URL = _url_sqlite_tu_goc_du_an(os.getenv("DATABASE_URL", "sqlite:///./data/bitss_clinic.db"))
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 
 

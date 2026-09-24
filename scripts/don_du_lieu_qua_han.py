@@ -11,8 +11,8 @@ Mã thoát khác 0 khi dọn thất bại, để cron báo lỗi thay vì im l�
 import os
 import sys
 
-# Chạy được bằng `python scripts/don_du_lieu_qua_han.py`: đưa thư mục gốc dự án vào
-# sys.path để import được setup_database và app.
+# Chạy được từ bất kỳ thư mục nào (kể cả từ cron): đưa thư mục gốc dự án vào sys.path để
+# import được setup_database và app; database luôn tính từ gốc dự án.
 GOC_DU_AN = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if GOC_DU_AN not in sys.path:
     sys.path.insert(0, GOC_DU_AN)

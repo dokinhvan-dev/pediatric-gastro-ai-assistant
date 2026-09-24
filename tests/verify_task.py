@@ -70,12 +70,12 @@ os.environ["RATE_DANG_NHAP_ANON"] = "100000"
 os.environ["RATE_UPLOAD_USER"] = "100000"
 
 # Ghi lai dau van tay cua DB that de chung minh no khong bi cham vao
-_REAL_DB = os.path.join("data", "bitss_clinic.db")
+_REAL_DB = os.path.join(GOC_DU_AN, "data", "bitss_clinic.db")
 _real_db_mtime_before = os.path.getmtime(_REAL_DB) if os.path.exists(_REAL_DB) else None
 
 # Thu muc uploads that co the da chua anh that do nguoi dung upload tay tu truoc.
 # Khong doi hoi no rong, chi doi hoi test KHONG them file nao vao do.
-_REAL_UPLOADS = os.path.join("data", "uploads", "raw")
+_REAL_UPLOADS = os.path.join(GOC_DU_AN, "data", "uploads", "raw")
 _real_uploads_before = set(os.listdir(_REAL_UPLOADS)) if os.path.isdir(_REAL_UPLOADS) else set()
 
 from PIL import Image                                          # noqa: E402
@@ -6237,6 +6237,89 @@ check(
     f"rc={_r36c.returncode} out={_r36c.stdout.strip()!r} mong={_NK_36!r} err={_r36c.stderr[-300:]}",
 )
 shutil.rmtree(_TMP_36, ignore_errors=True)
+
+# Duong dan TUONG DOI trong cau hinh (mac dinh lan gia tri trong .env) tinh tu goc du an, khong
+# tu thu muc dang dung. Truoc day chay scripts/create_clinician.py voi thu muc lam viec la
+# scripts/ (mac dinh cua PyCharm) bao "unable to open database file"; truoc khi co data/ con te
+# hon: lang le tao mot database rong moi ngay tai thu muc dang dung.
+# Chay tien trinh CON o mot thu muc tam rong (khong .env), bo moi bien duong dan khoi moi truong.
+_TMP_36D = tempfile.mkdtemp(prefix="bitss_cwd_")
+_env_36d = {k: v for k, v in os.environ.items()
+            if k not in ("DATABASE_URL", "UPLOAD_DIR", "THU_MUC_NHAT_KY_XUAT")}
+
+
+def _url_sqlite_36(*phan):
+    return "sqlite:///" + os.path.normpath(os.path.join(GOC_DU_AN, *phan)).replace("\\", "/")
+
+
+_r36d = _sp35.run([sys.executable, "-c",
+                   "import sys; sys.path.insert(0, sys.argv[1]); import setup_database as s; "
+                   "print(s.DATABASE_URL)", GOC_DU_AN],
+                  capture_output=True, text=True, cwd=_TMP_36D, env=_env_36d)
+check(
+    "36d) Chay tu thu muc khac: database mac dinh van la <goc du an>/data/bitss_clinic.db",
+    _r36d.returncode == 0 and _r36d.stdout.strip() == _url_sqlite_36("data", "bitss_clinic.db"),
+    f"rc={_r36d.returncode} out={_r36d.stdout.strip()!r} err={_r36d.stderr[-300:]}",
+)
+
+_r36e = _sp35.run([sys.executable, "-c",
+                   "import sys; sys.path.insert(0, sys.argv[1]); import setup_database as s; "
+                   "from scripts import xuat_du_lieu_huan_luyen as x; "
+                   "print(s.DATABASE_URL); print(x.THU_MUC_NHAT_KY)", GOC_DU_AN],
+                  capture_output=True, text=True, cwd=_TMP_36D,
+                  env={**_env_36d, "DATABASE_URL": "sqlite:///./data/khac.db",
+                       "THU_MUC_NHAT_KY_XUAT": os.path.join("data", "nk_khac")})
+import setup_database as _sd36  # noqa: E402
+check(
+    "36e) Duong dan tuong doi trong cau hinh tinh tu goc du an; URL tuyet doi, :memory:, "
+    "khong phai sqlite giu nguyen",
+    _r36e.returncode == 0
+    and _r36e.stdout.split() == [_url_sqlite_36("data", "khac.db"),
+                                 os.path.normpath(os.path.join(GOC_DU_AN, "data", "nk_khac"))]
+    and _sd36._url_sqlite_tu_goc_du_an(_DB_36_ENV) == _DB_36_ENV
+    and _sd36._url_sqlite_tu_goc_du_an("sqlite:///:memory:") == "sqlite:///:memory:"
+    and _sd36._url_sqlite_tu_goc_du_an("postgresql://u@h/bitss") == "postgresql://u@h/bitss"
+    and _sd36.duong_dan_du_an(_TMP_UPLOADS) == os.path.normpath(_TMP_UPLOADS),
+    f"rc={_r36e.returncode} out={_r36e.stdout.split()!r} err={_r36e.stderr[-300:]}",
+)
+shutil.rmtree(_TMP_36D, ignore_errors=True)
+
+# Chot an toan van giu khi image_path tuong doi duoc tinh tu goc du an: mot duong dan tuong doi
+# tro toi file CO THAT nam ngoai thu muc upload (o day la chinh setup_database.py) khong duoc phuc vu.
+with SessionLocal() as _db36f:
+    _r36f_ca = StoolRecord(child_id=FIXTURE_CHILD_ID, age_months_at_observation=2.0,
+                           feeding_type_at_observation="Bu me", image_path="setup_database.py",
+                           inference_status="queued", observed_at=datetime.now(timezone.utc))
+    _db36f.add(_r36f_ca)
+    _db36f.commit()
+    _db36f.refresh(_r36f_ca)
+    _RID_36F = _r36f_ca.id
+check(
+    "36f) image_path tuong doi tro ra file co that ngoai thu muc upload -> van khong phuc vu",
+    os.path.isfile(os.path.join(GOC_DU_AN, "setup_database.py"))
+    and client.get(f"/api/v1/records/{_RID_36F}/anh", headers=PARENT_H).status_code == 404,
+)
+
+# Anh cua ca cu (image_path tuong doi, luu truoc khi UPLOAD_DIR duoc tinh tu goc du an) phai doc
+# duoc du tien trinh dang dung o thu muc khac. Ca bo test chay voi thu muc lam viec la goc du an,
+# nen chi doi thu muc tam thoi o day moi phan biet duoc "tinh tu goc" voi "tinh tu cho dang dung".
+from app.api import records as _rec36  # noqa: E402
+
+_cwd_36g = os.getcwd()
+_tmp_36g = tempfile.mkdtemp(prefix="bitss_cwd_anh_")
+os.chdir(_tmp_36g)
+try:
+    _p36g_tuong_doi = _rec36.duong_dan_anh_that(os.path.join("data", "uploads", "raw", "x.jpg"))
+    _p36g_tuyet_doi = _rec36.duong_dan_anh_that(_p_ngoai)
+finally:
+    os.chdir(_cwd_36g)
+    shutil.rmtree(_tmp_36g, ignore_errors=True)
+check(
+    "36g) Anh cua ca cu luu duong dan tuong doi: tinh tu goc du an du dang dung o thu muc khac",
+    _p36g_tuong_doi == os.path.realpath(os.path.join(GOC_DU_AN, "data", "uploads", "raw", "x.jpg"))
+    and _p36g_tuyet_doi == os.path.realpath(_p_ngoai),
+    f"tuong_doi={_p36g_tuong_doi!r} tuyet_doi={_p36g_tuyet_doi!r}",
+)
 
 # =====================================================================
 # =====================================================================

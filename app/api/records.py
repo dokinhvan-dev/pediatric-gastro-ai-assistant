@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Q
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel
 
-from setup_database import SessionLocal, StoolRecord, Child, DoctorReview, User
+from setup_database import SessionLocal, StoolRecord, Child, DoctorReview, User, duong_dan_du_an
 from app.api.deps import (
     CurrentUser,
     assert_can_view_record,
@@ -25,9 +25,21 @@ router = APIRouter(prefix="/api/v1/records", tags=["Stool Records"])
 
 logger = logging.getLogger("bitss.records")
 
-# Cho phép override để test ghi vào thư mục tạm, không đụng data/uploads/ thật.
-UPLOAD_DIR = os.getenv("UPLOAD_DIR", "data/uploads/raw")
+# Cho phép override để test ghi vào thư mục tạm, không đụng data/uploads/ thật. Đường dẫn
+# tương đối tính từ gốc dự án, không từ thư mục đang đứng (xem setup_database.duong_dan_du_an).
+UPLOAD_DIR = duong_dan_du_an(os.getenv("UPLOAD_DIR", "data/uploads/raw"))
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
+def duong_dan_anh_that(image_path: Optional[str]) -> str:
+    """Đường dẫn thật của ảnh một ca, dùng chung cho endpoint trả ảnh và đường xuất dữ liệu.
+
+    Ca lưu trước khi UPLOAD_DIR được tính từ gốc dự án có image_path tương đối (vd
+    data/uploads/raw/<uuid>.jpg): cũng tính từ gốc dự án chứ không từ thư mục đang đứng, để
+    ảnh đọc được dù máy chủ hay script chạy từ đâu. Việc kiểm ảnh có nằm trong UPLOAD_DIR hay
+    không vẫn do nơi gọi làm, trên chính đường dẫn trả về ở đây.
+    """
+    return os.path.realpath(duong_dan_du_an(image_path or ""))
 
 # Định dạng hợp lệ được xác định bằng CHÍNH nội dung ảnh sau khi decode bằng Pillow.
 # Không tin content-type hay filename do client gửi lên: cả hai đều giả mạo được.
@@ -530,7 +542,7 @@ def get_record_image(record_id: int, principal: CurrentUser = Depends(get_curren
     # nhưng nó nằm trong database — một dòng bị sửa tay, hay một bản khôi phục lỗi, không
     # được phép biến endpoint này thành công cụ đọc file bất kỳ trên máy chủ.
     thu_muc = os.path.realpath(UPLOAD_DIR)
-    that = os.path.realpath(duong_dan or "")
+    that = duong_dan_anh_that(duong_dan)
     try:
         nam_trong = os.path.commonpath([thu_muc, that]) == thu_muc
     except ValueError:      # khác ổ đĩa trên Windows
