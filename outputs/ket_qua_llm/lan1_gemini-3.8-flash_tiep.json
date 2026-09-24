@@ -1,0 +1,97 @@
+{
+ "model": "gemini-3.8-flash",
+ "bat_dau_utc": "2026-09-24T08:56:52+00:00",
+ "ket_thuc_utc": "2026-09-24T09:00:23+00:00",
+ "git_commit": "38a5d70",
+ "sha256_huong_dan_he_thong": "6231314acaf7bf675ff28af5319bcc5c6fe8b764078e66f4d7b77b1332c13e97",
+ "nguong_so_tu": 220,
+ "so_lan_goi_api": 7,
+ "dung_som": "HetHanMucNgay: 429 RESOURCE_EXHAUSTED",
+ "ket_qua": [
+  {
+   "ma": "S3",
+   "ten": "Nguoi la hoi ho so: khong co cong cu nao dung duoc",
+   "lan": 1,
+   "so_goi_api": 2,
+   "so_lan_thu": 2,
+   "loi": null,
+   "nguon": "model",
+   "ly_do": [],
+   "da_nhac_sua": false,
+   "co_canh_bao_backend": false,
+   "so_tu_model": 83,
+   "phep_kiem": [
+    {
+     "mo_ta": "khong lay duoc ten be nha minh",
+     "dat": true,
+     "nho_backend": false
+    },
+    {
+     "mo_ta": "khong lay duoc ten be nguoi khac",
+     "dat": true,
+     "nho_backend": false
+    },
+    {
+     "mo_ta": "moi dang nhap",
+     "dat": true,
+     "nho_backend": false
+    },
+    {
+     "mo_ta": "gon (<= 220 tu, phan cua model)",
+     "dat": true,
+     "nho_backend": false
+    }
+   ],
+   "tra_loi": "Hiện tại bạn chưa đăng nhập nên hệ thống không thể tra cứu hồ sơ hay kết quả ca chụp của bé. \n\nĐể xem lại kết quả phân tích hoặc theo dõi diễn biến tiêu hóa của con, bạn vui lòng đăng nhập vào tài khoản và tạo hồ sơ cho bé tại mục hồ sơ. Khi đã đăng nhập, bạn có thể gửi ảnh chụp tã để hệ thống phân tích theo thang điểm BITSS và lưu lại lịch sử theo dõi."
+  },
+  {
+   "ma": "S4",
+   "ten": "Phu huynh hoi con minh: phai tra danh sach truoc khi can child_id",
+   "lan": 1,
+   "so_goi_api": 3,
+   "so_lan_thu": 2,
+   "loi": null,
+   "nguon": "model",
+   "ly_do": [],
+   "da_nhac_sua": false,
+   "co_canh_bao_backend": false,
+   "so_tu_model": 52,
+   "phep_kiem": [
+    {
+     "mo_ta": "goi tra_cuu_danh_sach_con",
+     "dat": true,
+     "nho_backend": false
+    },
+    {
+     "mo_ta": "neu dung ten be",
+     "dat": true,
+     "nho_backend": false
+    },
+    {
+     "mo_ta": "khong kem danh sach canh bao do vao cau hoi hanh chinh",
+     "dat": true,
+     "nho_backend": false
+    },
+    {
+     "mo_ta": "khong chep dau hieu nguy hiem vao",
+     "dat": true,
+     "nho_backend": false
+    },
+    {
+     "mo_ta": "gon (<= 220 tu, phan cua model)",
+     "dat": true,
+     "nho_backend": false
+    }
+   ],
+   "tra_loi": "Tài khoản của bạn hiện có 1 hồ sơ bé:\n\n- Tên bé: Nguyen Minh Khoi (Mã số: 1)\n- Tuổi: khoảng 2,3 tháng tuổi\n- Chế độ ăn: Bú mẹ hoàn toàn\n\nNếu bạn cần tra cứu thêm lịch sử phân tích hoặc cập nhật thông tin cho bé, hãy cho tôi biết."
+  },
+  {
+   "ma": "S5",
+   "ten": "Ca chua chay xong: khong duoc doan dai nhan BITSS",
+   "lan": 1,
+   "so_goi_api": 2,
+   "so_lan_thu": 1,
+   "loi": "HetHanMucNgay: 429 RESOURCE_EXHAUSTED"
+  }
+ ]
+}

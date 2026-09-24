@@ -1,0 +1,451 @@
+{
+ "so_cau": 67,
+ "so_duong_tinh": 36,
+ "so_co_dau": 36,
+ "chien_luoc": {
+  "nguyen_van": {
+   "tat_ca": {
+    "tp": 17,
+    "fp": 4,
+    "fn": 19,
+    "tn": 27,
+    "precision": 0.8095238095238095,
+    "recall": 0.4722222222222222,
+    "f1": 0.5964912280701755,
+    "accuracy": 0.6567164179104478
+   },
+   "co_dau": {
+    "tp": 17,
+    "fp": 4,
+    "fn": 3,
+    "tn": 12,
+    "precision": 0.8095238095238095,
+    "recall": 0.85,
+    "f1": 0.8292682926829269,
+    "accuracy": 0.8055555555555556
+   },
+   "khong_dau": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 16,
+    "tn": 15,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0,
+    "accuracy": 0.4838709677419355
+   },
+   "loi": [
+    {
+     "tin_nhan": "Bụng bé căng cứng",
+     "nhan": 1,
+     "du_doan": 0,
+     "ghi_chu": "bụng căng"
+    },
+    {
+     "tin_nhan": "Thóp của bé bị trũng xuống",
+     "nhan": 1,
+     "du_doan": 0,
+     "ghi_chu": "mất nước (diễn đạt khác từ khoá)"
+    },
+    {
+     "tin_nhan": "Mắt bé trũng sâu, bé mệt",
+     "nhan": 1,
+     "du_doan": 0,
+     "ghi_chu": "mất nước (diễn đạt khác từ khoá)"
+    },
+    {
+     "tin_nhan": "be 2 thang phan co lan mau tuoi",
+     "nhan": 1,
+     "du_doan": 0,
+     "ghi_chu": "máu"
+    },
+    {
+     "tin_nhan": "phan cua be den nhu hac in",
+     "nhan": 1,
+     "du_doan": 0,
+     "ghi_chu": "phân đen"
+    },
+    {
+     "tin_nhan": "phan be trang nhu dat set",
+     "nhan": 1,
+     "du_doan": 0,
+     "ghi_chu": "phân bạc màu"
+    },
+    {
+     "tin_nhan": "be non ra dich xanh",
+     "nhan": 1,
+     "du_doan": 0,
+     "ghi_chu": "nôn dịch mật"
+    },
+    {
+     "tin_nhan": "be bi chuong bung",
+     "nhan": 1,
+     "du_doan": 0,
+     "ghi_chu": "chướng bụng"
+    },
+    {
+     "tin_nhan": "be khoc khong ra nuoc mat",
+     "nhan": 1,
+     "du_doan": 0,
+     "ghi_chu": "mất nước"
+    },
+    {
+     "tin_nhan": "be li bi kho danh thuc",
+     "nhan": 1,
+     "du_doan": 0,
+     "ghi_chu": "li bì"
+    },
+    {
+     "tin_nhan": "be 6 tuan tuoi sot cao",
+     "nhan": 1,
+     "du_doan": 0,
+     "ghi_chu": "sốt dưới 3 tháng"
+    },
+    {
+     "tin_nhan": "be bi sot tu hom qua, be moi 1 thang",
+     "nhan": 1,
+     "du_doan": 0,
+     "ghi_chu": "sốt dưới 3 tháng"
+    },
+    {
+     "tin_nhan": "be tieu chay 3 tuan nay",
+     "nhan": 1,
+     "du_doan": 0,
+     "ghi_chu": "tiêu chảy kéo dài"
+    },
+    {
+     "tin_nhan": "be co giat",
+     "nhan": 1,
+     "du_doan": 0,
+     "ghi_chu": "co giật"
+    },
+    {
+     "tin_nhan": "be sut can",
+     "nhan": 1,
+     "du_doan": 0,
+     "ghi_chu": "sụt cân"
+    },
+    {
+     "tin_nhan": "be oi lien tuc",
+     "nhan": 1,
+     "du_doan": 0,
+     "ghi_chu": "nôn liên tục"
+    },
+    {
+     "tin_nhan": "be di ngoai ra mau",
+     "nhan": 1,
+     "du_doan": 0,
+     "ghi_chu": "máu (chỉ có từ đơn)"
+    },
+    {
+     "tin_nhan": "be bi non",
+     "nhan": 1,
+     "du_doan": 0,
+     "ghi_chu": "nôn (chỉ có từ đơn)"
+    },
+    {
+     "tin_nhan": "be sot 39 do, be moi 7 tuan",
+     "nhan": 1,
+     "du_doan": 0,
+     "ghi_chu": "sốt (chỉ có từ đơn)"
+    },
+    {
+     "tin_nhan": "Tôi sốt ruột quá, bé đi ngoài 3 lần",
+     "nhan": 0,
+     "du_doan": 1,
+     "ghi_chu": "thành ngữ 'sốt ruột'"
+    },
+    {
+     "tin_nhan": "Tôi nôn nóng muốn biết kết quả",
+     "nhan": 0,
+     "du_doan": 1,
+     "ghi_chu": "thành ngữ 'nôn nóng'"
+    },
+    {
+     "tin_nhan": "Phân bé không có máu, chỉ hơi lỏng",
+     "nhan": 0,
+     "du_doan": 1,
+     "ghi_chu": "phủ định"
+    },
+    {
+     "tin_nhan": "Bé 2 tuổi bị sốt nhẹ",
+     "nhan": 0,
+     "du_doan": 1,
+     "ghi_chu": "sốt nhưng không dưới 3 tháng"
+    }
+   ]
+  },
+  "bo_dau_het": {
+   "tat_ca": {
+    "tp": 33,
+    "fp": 20,
+    "fn": 3,
+    "tn": 11,
+    "precision": 0.6226415094339622,
+    "recall": 0.9166666666666666,
+    "f1": 0.7415730337078651,
+    "accuracy": 0.6567164179104478
+   },
+   "co_dau": {
+    "tp": 17,
+    "fp": 10,
+    "fn": 3,
+    "tn": 6,
+    "precision": 0.6296296296296297,
+    "recall": 0.85,
+    "f1": 0.723404255319149,
+    "accuracy": 0.6388888888888888
+   },
+   "khong_dau": {
+    "tp": 16,
+    "fp": 10,
+    "fn": 0,
+    "tn": 5,
+    "precision": 0.6153846153846154,
+    "recall": 1.0,
+    "f1": 0.761904761904762,
+    "accuracy": 0.6774193548387096
+   },
+   "loi": [
+    {
+     "tin_nhan": "Bụng bé căng cứng",
+     "nhan": 1,
+     "du_doan": 0,
+     "ghi_chu": "bụng căng"
+    },
+    {
+     "tin_nhan": "Thóp của bé bị trũng xuống",
+     "nhan": 1,
+     "du_doan": 0,
+     "ghi_chu": "mất nước (diễn đạt khác từ khoá)"
+    },
+    {
+     "tin_nhan": "Mắt bé trũng sâu, bé mệt",
+     "nhan": 1,
+     "du_doan": 0,
+     "ghi_chu": "mất nước (diễn đạt khác từ khoá)"
+    },
+    {
+     "tin_nhan": "Phân bé màu vàng hoa cà hoa cải",
+     "nhan": 0,
+     "du_doan": 1,
+     "ghi_chu": "màu, không phải máu"
+    },
+    {
+     "tin_nhan": "Bé sinh non 2 tuần, giờ ăn ngủ tốt",
+     "nhan": 0,
+     "du_doan": 1,
+     "ghi_chu": "sinh non"
+    },
+    {
+     "tin_nhan": "Tôi sốt ruột quá, bé đi ngoài 3 lần",
+     "nhan": 0,
+     "du_doan": 1,
+     "ghi_chu": "thành ngữ 'sốt ruột'"
+    },
+    {
+     "tin_nhan": "Tôi nôn nóng muốn biết kết quả",
+     "nhan": 0,
+     "du_doan": 1,
+     "ghi_chu": "thành ngữ 'nôn nóng'"
+    },
+    {
+     "tin_nhan": "Phân bé không có máu, chỉ hơi lỏng",
+     "nhan": 0,
+     "du_doan": 1,
+     "ghi_chu": "phủ định"
+    },
+    {
+     "tin_nhan": "Bé 2 tuổi bị sốt nhẹ",
+     "nhan": 0,
+     "du_doan": 1,
+     "ghi_chu": "sốt nhưng không dưới 3 tháng"
+    },
+    {
+     "tin_nhan": "Bé đang bổ sung sắt nên phân sẫm màu",
+     "nhan": 0,
+     "du_doan": 1,
+     "ghi_chu": "sắt làm phân sẫm"
+    },
+    {
+     "tin_nhan": "Phân bé có màu xanh rêu",
+     "nhan": 0,
+     "du_doan": 1,
+     "ghi_chu": "màu"
+    },
+    {
+     "tin_nhan": "Tôi muốn hỏi về chế độ ăn dặm",
+     "nhan": 0,
+     "du_doan": 1,
+     "ghi_chu": "câu hỏi chung"
+    },
+    {
+     "tin_nhan": "Da bé hơi vàng",
+     "nhan": 0,
+     "du_doan": 1,
+     "ghi_chu": "vàng da đơn thuần"
+    },
+    {
+     "tin_nhan": "phan be mau vang",
+     "nhan": 0,
+     "du_doan": 1,
+     "ghi_chu": "màu, không phải máu"
+    },
+    {
+     "tin_nhan": "be sinh non 2 tuan",
+     "nhan": 0,
+     "du_doan": 1,
+     "ghi_chu": "sinh non"
+    },
+    {
+     "tin_nhan": "toi muon hoi ve an dam",
+     "nhan": 0,
+     "du_doan": 1,
+     "ghi_chu": "câu hỏi chung"
+    },
+    {
+     "tin_nhan": "phan co mau xanh reu",
+     "nhan": 0,
+     "du_doan": 1,
+     "ghi_chu": "màu"
+    },
+    {
+     "tin_nhan": "toi sot ruot qua",
+     "nhan": 0,
+     "du_doan": 1,
+     "ghi_chu": "thành ngữ 'sốt ruột'"
+    },
+    {
+     "tin_nhan": "phan be khong co mau",
+     "nhan": 0,
+     "du_doan": 1,
+     "ghi_chu": "phủ định"
+    },
+    {
+     "tin_nhan": "be 2 tuoi bi sot nhe",
+     "nhan": 0,
+     "du_doan": 1,
+     "ghi_chu": "sốt nhưng không dưới 3 tháng"
+    },
+    {
+     "tin_nhan": "noi dung ket qua the nao",
+     "nhan": 0,
+     "du_doan": 1,
+     "ghi_chu": "câu hỏi chung"
+    },
+    {
+     "tin_nhan": "chuong trinh tiem chung cho be",
+     "nhan": 0,
+     "du_doan": 1,
+     "ghi_chu": "chướng/chương"
+    },
+    {
+     "tin_nhan": "be moi tap an dam, phan mau cam",
+     "nhan": 0,
+     "du_doan": 1,
+     "ghi_chu": "màu"
+    }
+   ]
+  },
+  "hien_tai": {
+   "tat_ca": {
+    "tp": 30,
+    "fp": 5,
+    "fn": 6,
+    "tn": 26,
+    "precision": 0.8571428571428571,
+    "recall": 0.8333333333333334,
+    "f1": 0.8450704225352113,
+    "accuracy": 0.835820895522388
+   },
+   "co_dau": {
+    "tp": 17,
+    "fp": 4,
+    "fn": 3,
+    "tn": 12,
+    "precision": 0.8095238095238095,
+    "recall": 0.85,
+    "f1": 0.8292682926829269,
+    "accuracy": 0.8055555555555556
+   },
+   "khong_dau": {
+    "tp": 13,
+    "fp": 1,
+    "fn": 3,
+    "tn": 14,
+    "precision": 0.9285714285714286,
+    "recall": 0.8125,
+    "f1": 0.8666666666666666,
+    "accuracy": 0.8709677419354839
+   },
+   "loi": [
+    {
+     "tin_nhan": "Bụng bé căng cứng",
+     "nhan": 1,
+     "du_doan": 0,
+     "ghi_chu": "bụng căng"
+    },
+    {
+     "tin_nhan": "Thóp của bé bị trũng xuống",
+     "nhan": 1,
+     "du_doan": 0,
+     "ghi_chu": "mất nước (diễn đạt khác từ khoá)"
+    },
+    {
+     "tin_nhan": "Mắt bé trũng sâu, bé mệt",
+     "nhan": 1,
+     "du_doan": 0,
+     "ghi_chu": "mất nước (diễn đạt khác từ khoá)"
+    },
+    {
+     "tin_nhan": "be di ngoai ra mau",
+     "nhan": 1,
+     "du_doan": 0,
+     "ghi_chu": "máu (chỉ có từ đơn)"
+    },
+    {
+     "tin_nhan": "be bi non",
+     "nhan": 1,
+     "du_doan": 0,
+     "ghi_chu": "nôn (chỉ có từ đơn)"
+    },
+    {
+     "tin_nhan": "be sot 39 do, be moi 7 tuan",
+     "nhan": 1,
+     "du_doan": 0,
+     "ghi_chu": "sốt (chỉ có từ đơn)"
+    },
+    {
+     "tin_nhan": "Tôi sốt ruột quá, bé đi ngoài 3 lần",
+     "nhan": 0,
+     "du_doan": 1,
+     "ghi_chu": "thành ngữ 'sốt ruột'"
+    },
+    {
+     "tin_nhan": "Tôi nôn nóng muốn biết kết quả",
+     "nhan": 0,
+     "du_doan": 1,
+     "ghi_chu": "thành ngữ 'nôn nóng'"
+    },
+    {
+     "tin_nhan": "Phân bé không có máu, chỉ hơi lỏng",
+     "nhan": 0,
+     "du_doan": 1,
+     "ghi_chu": "phủ định"
+    },
+    {
+     "tin_nhan": "Bé 2 tuổi bị sốt nhẹ",
+     "nhan": 0,
+     "du_doan": 1,
+     "ghi_chu": "sốt nhưng không dưới 3 tháng"
+    },
+    {
+     "tin_nhan": "be 2 tuoi bi sot nhe",
+     "nhan": 0,
+     "du_doan": 1,
+     "ghi_chu": "sốt nhưng không dưới 3 tháng"
+    }
+   ]
+  }
+ }
+}

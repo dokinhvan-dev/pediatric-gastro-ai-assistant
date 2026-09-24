@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.ruff_cache/
+*.egg-info/
+
+# Bi mat
+.env
+
+# Du lieu chay that: database, anh tai len, du lieu xuat. KHONG BAO GIO commit.
+# Chi giu lai .gitkeep de thu muc ton tai sau khi clone.
+data/*
+!data/.gitkeep
+*.db
+*.db-journal
+*.bak
+# Ban sao luu co gan timestamp (vd: bitss_clinic.db.bak-20260921-133928): *.bak o tren
+# KHONG bat duoc vi duoi file la '-<timestamp>'.
+*.bak-*
+# Luoi an toan neu ai do dat UPLOAD_DIR / --ra / THU_MUC_NHAT_KY_XUAT ra ngoai data/: du lieu
+# huan luyen da xuat la anh cua tre em (da tay sieu du lieu nhung van la anh benh an), con
+# nhat ky xuat noi ma an danh voi record_id that - co no la go duoc lop an danh cua ca tap.
+uploads/
+exports/
+nhat_ky_xuat/
+
+# Nhat ky console cua cac lan chay danh gia (ket qua JSON thi duoc commit).
+outputs/logs/*
+!outputs/logs/.gitkeep
+
+# IDE / cong cu phat trien
+.idea/
+.vscode/
+.claude/

@@ -1,0 +1,28 @@
+{
+ "model": "gemini-3.7-flash",
+ "bat_dau_utc": "2026-09-24T08:56:52+00:00",
+ "ket_thuc_utc": "2026-09-24T09:02:56+00:00",
+ "git_commit": "38a5d70",
+ "sha256_huong_dan_he_thong": "6231314acaf7bf675ff28af5319bcc5c6fe8b764078e66f4d7b77b1332c13e97",
+ "nguong_so_tu": 220,
+ "so_lan_goi_api": 6,
+ "dung_som": "HetHanMucNgay: 429 RESOURCE_EXHAUSTED",
+ "ket_qua": [
+  {
+   "ma": "S1",
+   "ten": "Kien thuc chung: khong duoc bia nhom BITSS",
+   "lan": 1,
+   "so_goi_api": 3,
+   "so_lan_thu": 3,
+   "loi": "TroLyBanTam: 503 UNAVAILABLE"
+  },
+  {
+   "ma": "S2",
+   "ten": "Dau hieu nguy hiem: phai giuc di kham, khong tran an suong",
+   "lan": 1,
+   "so_goi_api": 3,
+   "so_lan_thu": 3,
+   "loi": "HetHanMucNgay: 429 RESOURCE_EXHAUSTED"
+  }
+ ]
+}
