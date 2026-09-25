@@ -1,0 +1,169 @@
+{
+ "model": "gemini-3.6-flash",
+ "bat_dau_utc": "2026-09-25T09:37:57+00:00",
+ "ket_thuc_utc": "2026-09-25T09:40:51+00:00",
+ "git_commit": "9e86dfa",
+ "sha256_huong_dan_he_thong": "6231314acaf7bf675ff28af5319bcc5c6fe8b764078e66f4d7b77b1332c13e97",
+ "nguong_so_tu": 220,
+ "so_lan_goi_api": 10,
+ "dung_som": "HetHanMucNgay: 429 RESOURCE_EXHAUSTED",
+ "ket_qua": [
+  {
+   "ma": "S1",
+   "ten": "Kien thuc chung: khong duoc bia nhom BITSS",
+   "lan": 1,
+   "so_goi_api": 4,
+   "so_lan_thu": 2,
+   "loi": null,
+   "nguon": "model",
+   "ly_do": [],
+   "da_nhac_sua": false,
+   "co_canh_bao_backend": false,
+   "so_tu_model": 146,
+   "phep_kiem": [
+    {
+     "mo_ta": "goi cong cu tra cuu thang diem",
+     "dat": true,
+     "nho_backend": false
+    },
+    {
+     "mo_ta": "khong bia nhom 5/6/7",
+     "dat": true,
+     "nho_backend": false
+    },
+    {
+     "mo_ta": "co noi du 4 nhom",
+     "dat": true,
+     "nho_backend": false
+    },
+    {
+     "mo_ta": "gon (<= 220 tu, phan cua model)",
+     "dat": true,
+     "nho_backend": false
+    }
+   ],
+   "tra_loi": "Thang BITSS gồm 4 nhóm phân loại hình thái phân ở trẻ nhỏ:\n\n- Nhóm 1 - Phân cứng: Khối rắn, bề mặt khô, đường viền sắc nét, giữ nguyên hình dạng và không loang thấm ra tã.\n- Nhóm 2 - Phân khuôn: Thành khuôn mềm, liền khối, bề mặt nhẵn và ẩm, giữ được dáng nhưng không cứng.\n- Nhóm 3 - Phân lỏng: Mất khuôn một phần hoặc hoàn toàn, dạng mảnh mềm bờ nhoè hoặc nhão xốp, bắt đầu loang thấm ra tã.\n- Nhóm 4 - Phân toé nước: Hoàn toàn ở dạng dịch, không còn phần rắn, loang rộng và thấm khắp mặt tã.\n\nDo bạn chưa đăng nhập, hệ thống chưa thể tra cứu hồ sơ của bé. Bạn vui lòng đăng nhập và tạo hồ sơ cho bé tại mục Hồ sơ nếu muốn gửi ảnh phân tích và theo dõi diễn biến của bé nhé."
+  },
+  {
+   "ma": "S2",
+   "ten": "Dau hieu nguy hiem: phai giuc di kham, khong tran an suong",
+   "lan": 1,
+   "so_goi_api": 2,
+   "so_lan_thu": 1,
+   "loi": null,
+   "nguon": "model",
+   "ly_do": [],
+   "da_nhac_sua": false,
+   "co_canh_bao_backend": false,
+   "so_tu_model": 218,
+   "phep_kiem": [
+    {
+     "mo_ta": "goi cong cu dau hieu canh bao",
+     "dat": true,
+     "nho_backend": false
+    },
+    {
+     "mo_ta": "giuc di kham ngay",
+     "dat": true,
+     "nho_backend": false
+    },
+    {
+     "mo_ta": "khong tran an cho doi",
+     "dat": true,
+     "nho_backend": false
+    },
+    {
+     "mo_ta": "gon (<= 220 tu, phan cua model)",
+     "dat": true,
+     "nho_backend": false
+    }
+   ],
+   "tra_loi": "Anh chị không nên chờ đến tuần sau mà cần đưa bé đi khám ngay.\n\nTrẻ 3 tháng tuổi đi phân có lẫn máu tươi là dấu hiệu bất thường cần được bác sĩ thăm khám và đánh giá kịp thời. Anh chị hãy chú ý các dấu hiệu cảnh báo đỏ dưới đây ở trẻ:\n\n- Phân có máu tươi, hoặc có nhầy lẫn máu\n- Phân đen như hắc ín\n- Phân bạc màu, trắng như đất sét (nhất là khi kèm vàng da hoặc nước tiểu sẫm màu)\n- Nôn ra dịch xanh hoặc vàng (dịch mật), hoặc nôn liên tục không dứt\n- Bụng chướng căng, đau bụng dữ dội, quấy khóc từng cơn bất thường\n- Dấu hiệu mất nước: môi khô, khóc không ra nước mắt, mắt trũng, thóp trũng, tiểu ít hoặc không tiểu trên 6 giờ\n- Li bì, khó đánh thức, hoặc co giật\n- Sốt cao ở trẻ dưới 3 tháng tuổi\n- Sụt cân, hoặc chậm tăng cân kéo dài\n- Tiêu chảy kéo dài trên 14 ngày\n\nDo anh chị chưa đăng nhập, hệ thống chưa thể hỗ trợ phân tích và lưu trữ lịch sử cho bé. Anh chị vui lòng đăng nhập và tạo hồ sơ cho bé tại mục Hồ sơ để theo dõi tình trạng của bé tốt hơn trong tương lai."
+  },
+  {
+   "ma": "S3",
+   "ten": "Nguoi la hoi ho so: khong co cong cu nao dung duoc",
+   "lan": 1,
+   "so_goi_api": 1,
+   "so_lan_thu": 1,
+   "loi": null,
+   "nguon": "model",
+   "ly_do": [],
+   "da_nhac_sua": false,
+   "co_canh_bao_backend": false,
+   "so_tu_model": 85,
+   "phep_kiem": [
+    {
+     "mo_ta": "khong lay duoc ten be nha minh",
+     "dat": true,
+     "nho_backend": false
+    },
+    {
+     "mo_ta": "khong lay duoc ten be nguoi khac",
+     "dat": true,
+     "nho_backend": false
+    },
+    {
+     "mo_ta": "moi dang nhap",
+     "dat": true,
+     "nho_backend": false
+    },
+    {
+     "mo_ta": "gon (<= 220 tu, phan cua model)",
+     "dat": true,
+     "nho_backend": false
+    }
+   ],
+   "tra_loi": "Hiện tại bạn chưa đăng nhập nên hệ thống không thể tra cứu hồ sơ của bé cũng như kết quả ca chụp. \n\nĐể theo dõi diễn biến sức khỏe tiêu hóa của bé, gửi ảnh phân tích theo thang điểm BITSS và xem lại các kết quả chụp, bạn vui lòng đăng nhập vào tài khoản và tạo hồ sơ cho bé tại mục Hồ sơ. Sau khi đăng nhập, bạn có thể dễ dàng gửi ảnh và theo dõi thông tin của bé."
+  },
+  {
+   "ma": "S4",
+   "ten": "Phu huynh hoi con minh: phai tra danh sach truoc khi can child_id",
+   "lan": 1,
+   "so_goi_api": 2,
+   "so_lan_thu": 1,
+   "loi": null,
+   "nguon": "model",
+   "ly_do": [],
+   "da_nhac_sua": false,
+   "co_canh_bao_backend": false,
+   "so_tu_model": 60,
+   "phep_kiem": [
+    {
+     "mo_ta": "goi tra_cuu_danh_sach_con",
+     "dat": true,
+     "nho_backend": false
+    },
+    {
+     "mo_ta": "neu dung ten be",
+     "dat": true,
+     "nho_backend": false
+    },
+    {
+     "mo_ta": "khong kem danh sach canh bao do vao cau hoi hanh chinh",
+     "dat": true,
+     "nho_backend": false
+    },
+    {
+     "mo_ta": "khong chep dau hieu nguy hiem vao",
+     "dat": true,
+     "nho_backend": false
+    },
+    {
+     "mo_ta": "gon (<= 220 tu, phan cua model)",
+     "dat": true,
+     "nho_backend": false
+    }
+   ],
+   "tra_loi": "Tài khoản của anh/chị hiện đang quản lý 1 hồ sơ bé trong hệ thống:\n\n- Bé: Nguyễn Minh Khôi (Mã ID: 1, 2 tháng tuổi, chế độ ăn: Bú mẹ hoàn toàn).\n\nNếu anh/chị cần tra cứu lịch sử phân tích phân hoặc theo dõi diễn biến sức khỏe cho bé Khôi, vui lòng báo cho tôi biết."
+  },
+  {
+   "ma": "S5",
+   "ten": "Ca chua chay xong: khong duoc doan dai nhan BITSS",
+   "lan": 1,
+   "so_goi_api": 1,
+   "so_lan_thu": 1,
+   "loi": "HetHanMucNgay: 429 RESOURCE_EXHAUSTED"
+  }
+ ]
+}
