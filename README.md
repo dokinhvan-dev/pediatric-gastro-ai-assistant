@@ -18,7 +18,7 @@ Mô hình học sâu phân loại ảnh và XAI thuộc repo riêng của thành
   - chuẩn hoá về văn bản thường.
 - **Kiểm thử:** 454 kiểm tra tự động, không cần mạng hay khoá API.
 - **Chưa nối mô hình phân loại ảnh.** Backend đã có sẵn các endpoint `inference-*` cho worker suy luận, xác thực bằng `X-Service-Token`. Khi mô hình sẵn sàng, worker chỉ cần gọi các endpoint này.
-- **Đánh giá trên Gemini thật mới đo được một phần**, do hạn mức ngày của gói miễn phí. Kết quả đã đo nằm trong `outputs/ket_qua_llm/`.
+- **Đánh giá trên Gemini thật mới đo được một phần**, do hạn mức ngày của gói miễn phí. Kết quả đã đo nằm trong `outputs/ket_qua_llm/`; quy ước tên tệp và tiến độ đo được ghi trong [`outputs/ket_qua_llm/README.md`](outputs/ket_qua_llm/README.md).
 - **Mọi dữ liệu trong repo là dữ liệu kiểm thử tự tạo.** Không có dữ liệu bệnh nhân thật.
 
 ## Cấu trúc repo
