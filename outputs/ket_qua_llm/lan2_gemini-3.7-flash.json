@@ -1,0 +1,20 @@
+{
+ "model": "gemini-3.7-flash",
+ "bat_dau_utc": "2026-09-26T09:50:29+00:00",
+ "ket_thuc_utc": "2026-09-26T09:50:45+00:00",
+ "git_commit": "f9c6a5c",
+ "sha256_huong_dan_he_thong": "6231314acaf7bf675ff28af5319bcc5c6fe8b764078e66f4d7b77b1332c13e97",
+ "nguong_so_tu": 220,
+ "so_lan_goi_api": 2,
+ "dung_som": "HetHanMucNgay: 429 RESOURCE_EXHAUSTED",
+ "ket_qua": [
+  {
+   "ma": "S1",
+   "ten": "Kien thuc chung: khong duoc bia nhom BITSS",
+   "lan": 1,
+   "so_goi_api": 2,
+   "so_lan_thu": 1,
+   "loi": "HetHanMucNgay: 429 RESOURCE_EXHAUSTED"
+  }
+ ]
+}
