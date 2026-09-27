@@ -25,18 +25,19 @@ Trường `git_commit` nhận các giá trị khác nhau nhưng mã được đo
 |---|---|---|
 | `fd5ec18`, `fb26e44`, `38a5d70` | 24/09 | Commit trong lịch sử phát triển trước khi công bố repo (không có trong lịch sử `main`). So với `9e86dfa`, `app/` chỉ khác một cách viết điều kiện lọc tương đương và một chuỗi thông báo lỗi. `eval_agent.py` chỉ khác ở phần điều khiển việc chạy (thử lại khi 503, thời điểm ghi commit, đường dẫn); luật chấm không đổi. |
 | `9e86dfa` | 25/09 | Mã nguồn công bố. |
-| `f9c6a5c` | từ 26/09 | So với `9e86dfa` chỉ thêm các tệp kết quả của ngày 25/09; không đổi dòng mã nào. |
+| `f9c6a5c` | 26/09 | So với `9e86dfa` chỉ thêm các tệp kết quả của ngày 25/09; không đổi dòng mã nào. |
+| `666563f` | 27/09 | So với `f9c6a5c` chỉ thêm các tệp kết quả của ngày 26/09 và sửa README; không đổi dòng mã nào. |
 
-## Tiến độ (cập nhật 26/09/2026)
+## Tiến độ (cập nhật 27/09/2026)
 
 Số kịch bản đã đo được trên 8, theo từng lượt:
 
 | Mô hình | Lượt 1 | Lượt 2 | Lượt 3 | Tổng |
 |---|---|---|---|---|
 | gemini-3.5-flash-lite | 8/8 | 8/8 | 8/8 | 24/24 |
-| gemini-3.6-flash | 8/8 | 8/8 | 4/8 | 20/24 |
-| gemini-3.7-flash | 8/8 | 0/8 | 0/8 | 8/24 |
-| gemini-3.8-flash | 7/8 | 0/8 | 0/8 | 7/24 |
+| gemini-3.6-flash | 8/8 | 8/8 | 8/8 | 24/24 |
+| gemini-3.7-flash | 8/8 | 5/8 | 0/8 | 13/24 |
+| gemini-3.8-flash | 8/8 | 3/8 | 0/8 | 11/24 |
 
 ## Các tệp theo ngày đo
 
@@ -45,6 +46,7 @@ Số kịch bản đã đo được trên 8, theo từng lượt:
 | 24/09 | `lan1_gemini-3.5-flash-lite`, `lan1_gemini-3.6-flash`, `lan1_gemini-3.7-flash`, `lan1_gemini-3.8-flash`, `lan1_gemini-3.8-flash_tiep` |
 | 25/09 | `lan1_gemini-3.6-flash_tiep1`, `lan1_gemini-3.7-flash_tiep1`, `lan1_gemini-3.8-flash_tiep2`, `lan2_gemini-3.5-flash-lite`, `lan2_gemini-3.6-flash`, `lan3_gemini-3.5-flash-lite` |
 | 26/09 | `lan1_gemini-3.7-flash_tiep2`, `lan1_gemini-3.8-flash_tiep3`, `lan2_gemini-3.6-flash_tiep1`, `lan2_gemini-3.7-flash` (hết hạn mức ngay kịch bản đầu, chưa đo được gì), `lan3_gemini-3.6-flash` |
+| 27/09 | `lan1_gemini-3.8-flash_tiep4`, `lan2_gemini-3.7-flash_tiep1`, `lan2_gemini-3.8-flash`, `lan3_gemini-3.6-flash_tiep1` |
 
 ## Cấu trúc một tệp
 
