@@ -53,9 +53,11 @@ pediatric-gastro-ai-assistant/
 │   └── verify_task.py       # 454 kiểm tra tự động (38 mục), chạy trên DB và thư mục tạm
 ├── danh_gia/                # Đánh giá
 │   ├── eval_agent.py        # 8 kịch bản trên Gemini thật (tốn hạn mức)
-│   └── danh_gia_luoi_canh_bao.py    # Lưới cảnh báo trên 67 câu có nhãn, so với 2 chiến lược khác
+│   ├── danh_gia_luoi_canh_bao.py    # Lưới cảnh báo trên 67 câu có nhãn, so với 2 chiến lược khác
+│   └── phan_tich_co_so_toan.py      # Số liệu phần cơ sở toán học: Wilson, bootstrap, McNemar, Bảng 2.2...
 ├── outputs/
 │   ├── ket_qua_luoi_canh_bao.json   # Kết quả đánh giá lưới cảnh báo (tất định)
+│   ├── ket_qua_co_so_toan.json      # Kết quả phan_tich_co_so_toan.py (tất định)
 │   ├── ket_qua_llm/         # Kết quả các lượt chạy eval_agent.py (JSON)
 │   └── logs/                # Nhật ký console các lần chạy (không commit)
 ├── data/                    # Database, ảnh tải lên, dữ liệu xuất (KHÔNG commit, xem .gitignore)
@@ -132,6 +134,12 @@ uvx ruff check
 
 ```bash
 uv run python danh_gia/danh_gia_luoi_canh_bao.py
+```
+
+Tính lại các số liệu của phần cơ sở toán học trong báo cáo: tiền đề của hàm bỏ dấu σ, khoảng tin cậy Wilson, bootstrap F1, kiểm định McNemar, xác suất rò rỉ khi chia theo ảnh, báo động giả của đặc trưng xu hướng và của permutation test. Tất định, không cần mạng, mất khoảng một phút; ghi vào `outputs/ket_qua_co_so_toan.json`:
+
+```bash
+uv run python danh_gia/phan_tich_co_so_toan.py
 ```
 
 Chạy 8 kịch bản trên Gemini thật. Lệnh này cần khoá và tốn hạn mức ngày; nên đặt `GEMINI_EVAL_MODEL` khác model phục vụ người dùng:

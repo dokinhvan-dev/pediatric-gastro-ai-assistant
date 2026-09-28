@@ -1,0 +1,260 @@
+{
+ "tien_de": {
+  "K": 43,
+  "K_nhieu_tu": 38,
+  "K_don": [
+   "máu",
+   "nôn",
+   "ói",
+   "chướng",
+   "sốt"
+  ],
+  "dieu_kien_C": true,
+  "so_ky_tu_kiem": 781,
+  "phan_bo_do_dai_sigma": {
+   "1": 781
+  },
+  "dong_cau_20000_cap": true,
+  "don_dieu_tung_cau": true
+ },
+ "nfd": {
+  "cau": "Bé 3 tháng đi phân có lẫn máu tươi",
+  "khop_nfc": 3,
+  "khop_nfd": 0
+ },
+ "luoi": {
+  "nguyen_van": {
+   "tp": 17,
+   "fp": 4,
+   "fn": 19,
+   "tn": 27,
+   "recall": [
+    0.472,
+    [
+     0.32,
+     0.63
+    ]
+   ],
+   "precision": [
+    0.81,
+    [
+     0.6,
+     0.923
+    ]
+   ],
+   "specificity": [
+    0.871,
+    [
+     0.711,
+     0.949
+    ]
+   ],
+   "f1": [
+    0.596,
+    [
+     0.429,
+     0.738
+    ]
+   ]
+  },
+  "bo_dau_het": {
+   "tp": 33,
+   "fp": 20,
+   "fn": 3,
+   "tn": 11,
+   "recall": [
+    0.917,
+    [
+     0.782,
+     0.971
+    ]
+   ],
+   "precision": [
+    0.623,
+    [
+     0.488,
+     0.741
+    ]
+   ],
+   "specificity": [
+    0.355,
+    [
+     0.211,
+     0.531
+    ]
+   ],
+   "f1": [
+    0.742,
+    [
+     0.628,
+     0.835
+    ]
+   ]
+  },
+  "hien_tai": {
+   "tp": 30,
+   "fp": 5,
+   "fn": 6,
+   "tn": 26,
+   "recall": [
+    0.833,
+    [
+     0.681,
+     0.921
+    ]
+   ],
+   "precision": [
+    0.857,
+    [
+     0.706,
+     0.937
+    ]
+   ],
+   "specificity": [
+    0.839,
+    [
+     0.674,
+     0.929
+    ]
+   ],
+   "f1": [
+    0.845,
+    [
+     0.744,
+     0.927
+    ]
+   ]
+  }
+ },
+ "mcnemar": {
+  "nguyen_van": {
+   "goc_sai_lai_ghep_dung": 13,
+   "lai_ghep_sai_goc_dung": 1,
+   "p": 0.00183
+  },
+  "bo_dau_het": {
+   "goc_sai_lai_ghep_dung": 15,
+   "lai_ghep_sai_goc_dung": 3,
+   "p": 0.00754
+  }
+ },
+ "ro_ri": {
+  "q": 0.0778,
+  "m_tb": 27.99,
+  "g_m_tb": 0.896,
+  "ky_vong_tren": 86.0,
+  "m_nho_nhat_co_g_tren_nua": 9,
+  "bang": {
+   "1": -0.0,
+   "2": 0.143,
+   "5": 0.333,
+   "9": 0.517,
+   "10": 0.555,
+   "20": 0.802,
+   "28": 0.896,
+   "50": 0.983
+  }
+ },
+ "xu_huong": {
+  "4": {
+   "bao_dong_gia_quy_tac_deu": 0.828,
+   "bao_dong_gia_quy_tac_lech": 0.731,
+   "phat_hien_quy_tac": 0.681,
+   "p_min_hoan_vi": 0.333,
+   "bao_dong_gia_hoan_vi_deu": 0.0,
+   "bao_dong_gia_hoan_vi_lech": 0.0,
+   "phat_hien_hoan_vi": 0.0,
+   "lech_do_lam_tron": 0
+  },
+  "5": {
+   "bao_dong_gia_quy_tac_deu": 0.699,
+   "bao_dong_gia_quy_tac_lech": 0.548,
+   "phat_hien_quy_tac": 0.613,
+   "p_min_hoan_vi": 0.1,
+   "bao_dong_gia_hoan_vi_deu": 0.0,
+   "bao_dong_gia_hoan_vi_lech": 0.0,
+   "phat_hien_hoan_vi": 0.0,
+   "lech_do_lam_tron": 0
+  },
+  "6": {
+   "bao_dong_gia_quy_tac_deu": 0.592,
+   "bao_dong_gia_quy_tac_lech": 0.425,
+   "phat_hien_quy_tac": 0.574,
+   "p_min_hoan_vi": 0.1,
+   "bao_dong_gia_hoan_vi_deu": 0.0,
+   "bao_dong_gia_hoan_vi_lech": 0.0,
+   "phat_hien_hoan_vi": 0.0,
+   "lech_do_lam_tron": 0
+  },
+  "7": {
+   "bao_dong_gia_quy_tac_deu": 0.601,
+   "bao_dong_gia_quy_tac_lech": 0.442,
+   "phat_hien_quy_tac": 0.599,
+   "p_min_hoan_vi": 0.029,
+   "bao_dong_gia_hoan_vi_deu": 0.019,
+   "bao_dong_gia_hoan_vi_lech": 0.01,
+   "phat_hien_hoan_vi": 0.078,
+   "lech_do_lam_tron": 0
+  },
+  "8": {
+   "bao_dong_gia_quy_tac_deu": 0.641,
+   "bao_dong_gia_quy_tac_lech": 0.491,
+   "phat_hien_quy_tac": 0.663,
+   "p_min_hoan_vi": 0.029,
+   "bao_dong_gia_hoan_vi_deu": 0.012,
+   "bao_dong_gia_hoan_vi_lech": 0.004,
+   "phat_hien_hoan_vi": 0.059,
+   "lech_do_lam_tron": 0
+  },
+  "9": {
+   "bao_dong_gia_quy_tac_deu": 0.535,
+   "bao_dong_gia_quy_tac_lech": 0.366,
+   "phat_hien_quy_tac": 0.614,
+   "p_min_hoan_vi": 0.008,
+   "bao_dong_gia_hoan_vi_deu": 0.033,
+   "bao_dong_gia_hoan_vi_lech": 0.023,
+   "phat_hien_hoan_vi": 0.162,
+   "lech_do_lam_tron": 0
+  },
+  "10": {
+   "bao_dong_gia_quy_tac_deu": 0.484,
+   "bao_dong_gia_quy_tac_lech": 0.307,
+   "phat_hien_quy_tac": 0.588,
+   "p_min_hoan_vi": 0.008,
+   "bao_dong_gia_hoan_vi_deu": 0.024,
+   "bao_dong_gia_hoan_vi_lech": 0.012,
+   "phat_hien_hoan_vi": 0.129,
+   "lech_do_lam_tron": 0
+  }
+ },
+ "hmac_can_trung_ma": {
+  "10000": 4.135489472458862e-17,
+  "1000000": 4.1358989268620756e-13
+ },
+ "thu_lai": {
+  "0.1": {
+   "thanh_cong": 0.999,
+   "E_N": 1.11,
+   "thanh_cong_tren_moi_loi_goi": 0.9,
+   "luot_thanh_cong_tren_20": 18.0
+  },
+  "0.3": {
+   "thanh_cong": 0.973,
+   "E_N": 1.39,
+   "thanh_cong_tren_moi_loi_goi": 0.7,
+   "luot_thanh_cong_tren_20": 14.0
+  },
+  "0.5": {
+   "thanh_cong": 0.875,
+   "E_N": 1.75,
+   "thanh_cong_tren_moi_loi_goi": 0.5,
+   "luot_thanh_cong_tren_20": 10.0
+  },
+  "0.8": {
+   "thanh_cong": 0.488,
+   "E_N": 2.44,
+   "thanh_cong_tren_moi_loi_goi": 0.2,
+   "luot_thanh_cong_tren_20": 4.0
+  }
+ }
+}
