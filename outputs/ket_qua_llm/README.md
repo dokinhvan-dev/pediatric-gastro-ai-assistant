@@ -27,8 +27,9 @@ Trường `git_commit` nhận các giá trị khác nhau nhưng mã được đo
 | `9e86dfa` | 25/09 | Mã nguồn công bố. |
 | `f9c6a5c` | 26/09 | So với `9e86dfa` chỉ thêm các tệp kết quả của ngày 25/09; không đổi dòng mã nào. |
 | `666563f` | 27/09 | So với `f9c6a5c` chỉ thêm các tệp kết quả của ngày 26/09 và sửa README; không đổi dòng mã nào. |
+| `668ea23` | 28/09 | So với `666563f` chỉ thêm các tệp kết quả của ngày 27/09 và sửa README; không đổi dòng mã nào. |
 
-## Tiến độ (cập nhật 27/09/2026)
+## Tiến độ (cập nhật 28/09/2026)
 
 Số kịch bản đã đo được trên 8, theo từng lượt:
 
@@ -36,8 +37,8 @@ Số kịch bản đã đo được trên 8, theo từng lượt:
 |---|---|---|---|---|
 | gemini-3.5-flash-lite | 8/8 | 8/8 | 8/8 | 24/24 |
 | gemini-3.6-flash | 8/8 | 8/8 | 8/8 | 24/24 |
-| gemini-3.7-flash | 8/8 | 5/8 | 0/8 | 13/24 |
-| gemini-3.8-flash | 8/8 | 3/8 | 0/8 | 11/24 |
+| gemini-3.7-flash | 8/8 | 8/8 | 4/8 | 20/24 |
+| gemini-3.8-flash | 8/8 | 6/8 | 0/8 | 14/24 |
 
 ## Các tệp theo ngày đo
 
@@ -47,6 +48,7 @@ Số kịch bản đã đo được trên 8, theo từng lượt:
 | 25/09 | `lan1_gemini-3.6-flash_tiep1`, `lan1_gemini-3.7-flash_tiep1`, `lan1_gemini-3.8-flash_tiep2`, `lan2_gemini-3.5-flash-lite`, `lan2_gemini-3.6-flash`, `lan3_gemini-3.5-flash-lite` |
 | 26/09 | `lan1_gemini-3.7-flash_tiep2`, `lan1_gemini-3.8-flash_tiep3`, `lan2_gemini-3.6-flash_tiep1`, `lan2_gemini-3.7-flash` (hết hạn mức ngay kịch bản đầu, chưa đo được gì), `lan3_gemini-3.6-flash` |
 | 27/09 | `lan1_gemini-3.8-flash_tiep4`, `lan2_gemini-3.7-flash_tiep1`, `lan2_gemini-3.8-flash`, `lan3_gemini-3.6-flash_tiep1` |
+| 28/09 | `lan2_gemini-3.7-flash_tiep2`, `lan2_gemini-3.8-flash_tiep1`, `lan3_gemini-3.7-flash` |
 
 ## Cấu trúc một tệp
 
