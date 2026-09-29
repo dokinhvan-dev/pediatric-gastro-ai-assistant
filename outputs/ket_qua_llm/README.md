@@ -55,7 +55,10 @@ Số kịch bản đã đo được trên 8, theo từng lượt:
 Các trường ở mức tệp gồm `model`, `bat_dau_utc`, `ket_thuc_utc`, `git_commit`, `sha256_huong_dan_he_thong`, `nguong_so_tu` (ngưỡng độ dài 220 từ), `so_lan_goi_api` và `dung_som` (lý do dừng sớm, nếu có).
 
 Mảng `ket_qua` có một phần tử cho mỗi kịch bản, gồm các trường:
-- `ma`: mã kịch bản S1–S8;
+- `ma`, `ten`: mã kịch bản S1–S8 và tên ngắn;
+- `loi`: lỗi khiến kịch bản không đo được (`null` nếu đo xong);
+- `so_goi_api`: số lời gọi Gemini của kịch bản; `so_lan_thu`: số lần phải chạy lại cả kịch bản vì quá tải;
+- `ly_do`: mã lý do khi câu trả lời bị backend chặn hoặc thay;
 - `nguon`: nguồn câu trả lời (`model` hoặc `du_phong`);
 - `da_nhac_sua`, `co_canh_bao_backend`: backend có can thiệp hay không;
 - `so_tu_model`: số từ do riêng mô hình viết;
@@ -63,3 +66,11 @@ Mảng `ket_qua` có một phần tử cho mỗi kịch bản, gồm các trư�
 - `tra_loi`: câu trả lời đầy đủ.
 
 Trường `lan` bên trong một tệp là số thứ tự lần chạy trong lần gọi đó (luôn là 1 với cách chạy hiện tại). Số lượt đo nằm ở tên tệp.
+
+## Cách tổng hợp
+
+Mỗi ô (mô hình, lượt, kịch bản) lấy từ phần tử có `loi` bằng `null`; không ô nào được đo hai lần. Một kịch bản "đạt trọn" khi mọi phép kiểm có `dat` là `true`. Một phép kiểm "chỉ đạt nhờ backend" khi `dat` và `nho_backend` cùng là `true`. Một kịch bản "không ổn định" khi có lượt đạt trọn và có lượt không. Số lời gọi API được cộng trên các kịch bản đo được.
+
+Số lỗi 503 (số lời gọi bị Gemini từ chối vì quá tải) được đếm từ nhật ký console trong `outputs/logs/`. Nhật ký không được commit, nên con số này không tính lại được chỉ từ repo; trường `so_lan_thu` ở trên là một đại lượng khác (số lần chạy lại cả kịch bản).
+
+Việc chạy nối tiếp qua nhiều ngày và tổng hợp thành bảng cho báo cáo dùng hai script hỗ trợ nằm ngoài repo; chúng chỉ gọi `danh_gia/eval_agent.py` với `--model`, `--chi-bai` và `--ghi-ket-qua`, và đọc lại các tệp trong thư mục này theo đúng quy tắc trên.
