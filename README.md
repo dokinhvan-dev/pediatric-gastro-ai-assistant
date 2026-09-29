@@ -89,6 +89,12 @@ Sao chép `.env.example` thành `.env` rồi điền giá trị:
 | `GEMINI_API_KEY` | không | Để trống thì trợ lý tắt (`POST /api/v1/chat` trả 503); phần còn lại vẫn chạy |
 | `INFERENCE_SERVICE_TOKEN` | không | Bí mật dùng chung với worker suy luận. Để trống thì mọi endpoint `inference-*` từ chối |
 | `KHOA_MA_AN_DANH_DU_LIEU` | khi xuất dữ liệu | Khoá HMAC tạo mã bệnh nhân ẩn danh; giữ cố định suốt dự án |
+| `GEMINI_MODEL` | không | Model phục vụ người dùng; để trống thì dùng mặc định đã ghim trong mã (`gemini-3.6-flash`) |
+| `GEMINI_EVAL_MODEL` | không | Model mặc định của `danh_gia/eval_agent.py`; nên khác model phục vụ vì hạn mức tính riêng theo từng model |
+| `CORS_ALLOW_ORIGINS` | không | Các origin được phép gọi API từ trình duyệt |
+| `CHAT_LUU_TRU_NGAY` | không | Số ngày giữ lịch sử hội thoại (mặc định 90, cho phép 1–3650) |
+
+Các biến còn lại (hạn mức gọi, số vòng và số lần thử lại khi gọi Gemini, đường dẫn database và thư mục ảnh...) đều có giá trị mặc định và được giải thích trong `.env.example`.
 
 ## Cách chạy
 
@@ -148,7 +154,7 @@ Chạy 8 kịch bản trên Gemini thật. Lệnh này cần khoá và tốn h�
 uv run python danh_gia/eval_agent.py --model gemini-3.6-flash --ghi-ket-qua outputs/ket_qua_llm/lan1_gemini-3.6-flash.json
 ```
 
-Mỗi tệp kết quả JSON ghi kèm model, thời điểm chạy, mã băm SHA-256 của hướng dẫn hệ thống và commit mã nguồn lúc chạy. Các commit của những lượt đo hiện có thuộc kho phát triển (lưu trữ riêng), không có trong lịch sử của repo này.
+Mỗi tệp kết quả JSON ghi kèm model, thời điểm chạy, mã băm SHA-256 của hướng dẫn hệ thống và commit mã nguồn lúc chạy. Chỉ các lượt đo ngày 24/09 ghi commit của kho phát triển (lưu trữ riêng, không có trong lịch sử repo này); từ ngày 25/09, commit ghi trong kết quả đều có trong lịch sử `main`. Đợt đo 3 lượt × 4 mô hình được chạy qua nhiều ngày vì hạn mức; cách đọc các tệp, tiến độ và cách tổng hợp nằm trong [`outputs/ket_qua_llm/README.md`](outputs/ket_qua_llm/README.md).
 
 ## Khai báo sử dụng AI
 
