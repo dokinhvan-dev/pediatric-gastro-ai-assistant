@@ -28,8 +28,9 @@ Trường `git_commit` nhận các giá trị khác nhau nhưng mã được đo
 | `f9c6a5c` | 26/09 | So với `9e86dfa` chỉ thêm các tệp kết quả của ngày 25/09; không đổi dòng mã nào. |
 | `666563f` | 27/09 | So với `f9c6a5c` chỉ thêm các tệp kết quả của ngày 26/09 và sửa README; không đổi dòng mã nào. |
 | `668ea23` | 28/09 | So với `666563f` chỉ thêm các tệp kết quả của ngày 27/09 và sửa README; không đổi dòng mã nào. |
+| `7742b9d` | 29/09 | So với `668ea23`: thêm tệp kết quả ngày 28/09, script phân tích `danh_gia/phan_tich_co_so_toan.py` và sửa README. `app/`, `danh_gia/eval_agent.py` và `tests/` không đổi. Commit này sau đó được đổi tên thành "Update README"; trên `main` nó mang mã `2dc2999` với nội dung giống hệt, còn mã gốc `7742b9d` được giữ ở tag `do-llm-2909`. |
 
-## Tiến độ (cập nhật 28/09/2026)
+## Tiến độ (cập nhật 30/09/2026)
 
 Số kịch bản đã đo được trên 8, theo từng lượt:
 
@@ -37,8 +38,8 @@ Số kịch bản đã đo được trên 8, theo từng lượt:
 |---|---|---|---|---|
 | gemini-3.5-flash-lite | 8/8 | 8/8 | 8/8 | 24/24 |
 | gemini-3.6-flash | 8/8 | 8/8 | 8/8 | 24/24 |
-| gemini-3.7-flash | 8/8 | 8/8 | 4/8 | 20/24 |
-| gemini-3.8-flash | 8/8 | 6/8 | 0/8 | 14/24 |
+| gemini-3.7-flash | 8/8 | 8/8 | 8/8 | 24/24 |
+| gemini-3.8-flash | 8/8 | 8/8 | 0/8 | 16/24 |
 
 ## Các tệp theo ngày đo
 
@@ -49,6 +50,7 @@ Số kịch bản đã đo được trên 8, theo từng lượt:
 | 26/09 | `lan1_gemini-3.7-flash_tiep2`, `lan1_gemini-3.8-flash_tiep3`, `lan2_gemini-3.6-flash_tiep1`, `lan2_gemini-3.7-flash` (hết hạn mức ngay kịch bản đầu, chưa đo được gì), `lan3_gemini-3.6-flash` |
 | 27/09 | `lan1_gemini-3.8-flash_tiep4`, `lan2_gemini-3.7-flash_tiep1`, `lan2_gemini-3.8-flash`, `lan3_gemini-3.6-flash_tiep1` |
 | 28/09 | `lan2_gemini-3.7-flash_tiep2`, `lan2_gemini-3.8-flash_tiep1`, `lan3_gemini-3.7-flash` |
+| 29/09 | `lan2_gemini-3.8-flash_tiep2`, `lan3_gemini-3.7-flash_tiep1`, `lan3_gemini-3.8-flash` (hết hạn mức ngay kịch bản đầu, chưa đo được gì). Đây là đợt đo của ngày 29/09 nhưng tệp được ghi sáng 30/09 (khoảng 09:50), vẫn trong chu kỳ hạn mức ngày bắt đầu lúc 14:00 ngày 29/09. |
 
 ## Cấu trúc một tệp
 
