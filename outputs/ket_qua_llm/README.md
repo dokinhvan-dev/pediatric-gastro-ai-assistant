@@ -29,6 +29,7 @@ Trường `git_commit` nhận các giá trị khác nhau nhưng mã được đo
 | `666563f` | 27/09 | So với `f9c6a5c` chỉ thêm các tệp kết quả của ngày 26/09 và sửa README; không đổi dòng mã nào. |
 | `668ea23` | 28/09 | So với `666563f` chỉ thêm các tệp kết quả của ngày 27/09 và sửa README; không đổi dòng mã nào. |
 | `7742b9d` | 29/09 | So với `668ea23`: thêm tệp kết quả ngày 28/09, script phân tích `danh_gia/phan_tich_co_so_toan.py` và sửa README. `app/`, `danh_gia/eval_agent.py` và `tests/` không đổi. Commit này sau đó được đổi tên thành "Update README"; trên `main` nó mang mã `2dc2999` với nội dung giống hệt, còn mã gốc `7742b9d` được giữ ở tag `do-llm-2909`. |
+| `ac44bb3` | 30/09 | So với `2dc2999` chỉ thêm các tệp kết quả của ngày 29/09 và sửa README; không đổi dòng mã nào. |
 
 ## Tiến độ (cập nhật 30/09/2026)
 
@@ -51,6 +52,7 @@ Số kịch bản đã đo được trên 8, theo từng lượt:
 | 27/09 | `lan1_gemini-3.8-flash_tiep4`, `lan2_gemini-3.7-flash_tiep1`, `lan2_gemini-3.8-flash`, `lan3_gemini-3.6-flash_tiep1` |
 | 28/09 | `lan2_gemini-3.7-flash_tiep2`, `lan2_gemini-3.8-flash_tiep1`, `lan3_gemini-3.7-flash` |
 | 29/09 | `lan2_gemini-3.8-flash_tiep2`, `lan3_gemini-3.7-flash_tiep1`, `lan3_gemini-3.8-flash` (hết hạn mức ngay kịch bản đầu, chưa đo được gì). Đây là đợt đo của ngày 29/09 nhưng tệp được ghi sáng 30/09 (khoảng 09:50), vẫn trong chu kỳ hạn mức ngày bắt đầu lúc 14:00 ngày 29/09. |
+| 30/09 | `lan3_gemini-3.8-flash_tiep1` (chưa đo được gì: S1 bị quá tải 503 cả ba lần thử, S2 hết hạn mức ngày). Hôm đó hai tiến trình đo bị chạy cùng lúc và cùng ghi vào tệp này; tệp giữ lại là của lần ghi sau. Cả hai lần đều không đo xong kịch bản nào nên không mất kết quả. Bộ chạy sau đó được thêm khoá chống chạy song song. |
 
 ## Cấu trúc một tệp
 
