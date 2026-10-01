@@ -16,7 +16,7 @@ Mô hình học sâu phân loại ảnh và XAI thuộc repo riêng của thành
   - chặn phán quyết phân luồng;
   - lưới cảnh báo dấu hiệu nguy hiểm;
   - chuẩn hoá về văn bản thường.
-- **Kiểm thử:** 454 kiểm tra tự động, không cần mạng hay khoá API.
+- **Kiểm thử:** 460 kiểm tra tự động, không cần mạng hay khoá API. Chất lượng của chính bộ kiểm tra được đo bằng kiểm thử đột biến (19 đột biến, chạy lại được).
 - **Chưa nối mô hình phân loại ảnh.** Backend đã có sẵn các endpoint `inference-*` cho worker suy luận, xác thực bằng `X-Service-Token`. Khi mô hình sẵn sàng, worker chỉ cần gọi các endpoint này.
 - **Đánh giá trên Gemini thật mới đo được một phần**, do hạn mức ngày của gói miễn phí. Kết quả đã đo nằm trong `outputs/ket_qua_llm/`; quy ước tên tệp và tiến độ đo được ghi trong [`outputs/ket_qua_llm/README.md`](outputs/ket_qua_llm/README.md).
 - **Mọi dữ liệu trong repo là dữ liệu kiểm thử tự tạo.** Không có dữ liệu bệnh nhân thật.
@@ -50,11 +50,12 @@ pediatric-gastro-ai-assistant/
 │   ├── don_du_lieu_qua_han.py       # Dọn tin nhắn quá hạn, token hết hạn (cron)
 │   └── xuat_du_lieu_huan_luyen.py   # Xuất dữ liệu huấn luyện ẩn danh cho phần mô hình
 ├── tests/
-│   └── verify_task.py       # 454 kiểm tra tự động (38 mục), chạy trên DB và thư mục tạm
+│   └── verify_task.py       # 460 kiểm tra tự động (39 mục), chạy trên DB và thư mục tạm
 ├── danh_gia/                # Đánh giá
 │   ├── eval_agent.py        # 8 kịch bản trên Gemini thật (tốn hạn mức)
 │   ├── danh_gia_luoi_canh_bao.py    # Lưới cảnh báo trên 67 câu có nhãn, so với 2 chiến lược khác
-│   └── phan_tich_co_so_toan.py      # Số liệu phần cơ sở toán học: Wilson, bootstrap, McNemar, Bảng 2.2...
+│   ├── phan_tich_co_so_toan.py      # Số liệu phần cơ sở toán học: Wilson, bootstrap, McNemar, Bảng 2.2...
+│   └── kiem_thu_dot_bien.py         # Kiểm thử đột biến: 19 lỗi cố ý chèn vào bản sao của mã
 ├── outputs/
 │   ├── ket_qua_luoi_canh_bao.json   # Kết quả đánh giá lưới cảnh báo (tất định)
 │   ├── ket_qua_co_so_toan.json      # Kết quả phan_tich_co_so_toan.py (tất định)
@@ -126,7 +127,13 @@ Sau đó mở tài liệu API tương tác tại <http://127.0.0.1:8000/docs>. N
 uv run python tests/verify_task.py
 ```
 
-Bộ kiểm tra tự dựng database tạm và mô hình giả. Nó không cần mạng, không cần khoá API, và không đụng vào `data/`. Kết quả mong đợi là `454/454 PASS`.
+Bộ kiểm tra tự dựng database tạm và mô hình giả. Nó không cần mạng, không cần khoá API, và không đụng vào `data/`. Kết quả mong đợi là `460/460 PASS`.
+
+Để đo chất lượng của chính bộ kiểm tra, chạy kiểm thử đột biến. Script chèn từng lỗi trong 19 lỗi nhỏ vào một bản sao của mã (repo không bị sửa) rồi xem bộ kiểm tra có bắt được không; mất vài phút. Kết quả hiện tại là 17/19, hai đột biến còn lại là đột biến tương đương (không đổi hành vi):
+
+```bash
+uv run python danh_gia/kiem_thu_dot_bien.py
+```
 
 Để kiểm tra tĩnh mã nguồn (pyflakes cùng các lỗi cơ bản của pycodestyle), chạy:
 

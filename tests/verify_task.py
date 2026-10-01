@@ -194,6 +194,24 @@ client = TestClient(app)
 results = []
 
 
+# Mot ngoai le chua bat trong mot bai lam ca script dung giua chung: cac bai sau khong chay,
+# va khong co dong [FAIL] nao co ten - nguoi doc khong biet cai gi hong. Kiem thu dot bien
+# (2026-10-01) gap dung truong hop do. Hook nay bien no thanh mot bai TRUOT co ten, in tong
+# ket cua phan da chay, don thu muc tam, va thoat voi ma loi.
+def _bao_dung_giua_chung(loai, loi, vet):
+    import traceback
+    noi = traceback.extract_tb(vet)[-1] if vet else None
+    vi_tri = f"{os.path.basename(noi.filename)}:{noi.lineno}" if noi else "?"
+    print(f"[FAIL] 00) Bo kiem tra dung giua chung vi ngoai le chua bat -- "
+          f"{loai.__name__}: {loi} (tai {vi_tri})")
+    so_truot = sum(1 for r in results if r[1] == "FAIL") + 1
+    print(f"\n{len(results) + 1 - so_truot}/{len(results) + 1} PASS (bo kiem tra DUNG GIUA CHUNG)")
+    shutil.rmtree(_TMP_ROOT, ignore_errors=True)
+
+
+sys.excepthook = _bao_dung_giua_chung
+
+
 # --- Header xac thuc dung chung cho toan bo test ------------------------------
 def bearer(token):
     return {"Authorization": f"Bearer {token}"}
@@ -6274,13 +6292,15 @@ check(
     "36e) Duong dan tuong doi trong cau hinh tinh tu goc du an; URL tuyet doi, :memory:, "
     "khong phai sqlite giu nguyen",
     _r36e.returncode == 0
-    and _r36e.stdout.split() == [_url_sqlite_36("data", "khac.db"),
+    # splitlines, KHONG split(): duong dan chua dau cach (vd ban sao repo dat trong
+    # "C:\Users\ten co dau cach") se bi split() cat lam doi, lam bai truot oan.
+    and _r36e.stdout.splitlines() == [_url_sqlite_36("data", "khac.db"),
                                  os.path.normpath(os.path.join(GOC_DU_AN, "data", "nk_khac"))]
     and _sd36._url_sqlite_tu_goc_du_an(_DB_36_ENV) == _DB_36_ENV
     and _sd36._url_sqlite_tu_goc_du_an("sqlite:///:memory:") == "sqlite:///:memory:"
     and _sd36._url_sqlite_tu_goc_du_an("postgresql://u@h/bitss") == "postgresql://u@h/bitss"
     and _sd36.duong_dan_du_an(_TMP_UPLOADS) == os.path.normpath(_TMP_UPLOADS),
-    f"rc={_r36e.returncode} out={_r36e.stdout.split()!r} err={_r36e.stderr[-300:]}",
+    f"rc={_r36e.returncode} out={_r36e.stdout.splitlines()!r} err={_r36e.stderr[-300:]}",
 )
 shutil.rmtree(_TMP_36D, ignore_errors=True)
 
@@ -6482,6 +6502,102 @@ check(
 check(
     "38h) Tien de B4: moi doan luoi an toan (tung dau hieu va ca to hop) deu co cum huong di kham",
     all(agent_service.co_huong_di_kham(d) for d in _doan_luoi),
+)
+
+# =====================================================================
+# 39. KIEM TRA BIEN BO SUNG SAU KIEM THU DOT BIEN
+#
+# Kiem thu dot bien ngay 2026-10-01 (19 dot bien chen vao ban sao cua ma) tim ra 6 dot bien
+# SONG SOT khong phai dot bien tuong duong: bo kiem tra chay qua chung ma khong bai nao
+# truot. Moi bai duoi day nham dung mot dot bien do va da duoc thu nguoc: DAT tren ma that,
+# TRUOT tren ma da bi lam hong.
+# =====================================================================
+print("\n--- 39. Kiem tra bien bo sung sau kiem thu dot bien ---")
+from app.services import rate_limit as _rl39          # noqa: E402
+from app.services import xuat_du_lieu as _xdl39       # noqa: E402
+import hashlib as _hashlib39                           # noqa: E402
+import hmac as _hmac39                                 # noqa: E402
+
+_n39, _W39 = _rl39.HAN_MUC["chat"][0], _rl39.HAN_MUC["chat"][2]
+
+# (D04) Bien dung mot diem thoi gian: muc cu nhat vua TRON W giay thi da het hieu luc.
+_rl39.xoa_het()
+for _ in range(_n39):
+    _rl39.kiem_tra("chat", "ip:39a", bay_gio=1000.0)
+check(
+    "39a) Cua so truot: luot cu nhat vua tron W giay thi da ra khoi cua so (bien t > moc_cu)",
+    _rl39.kiem_tra("chat", "ip:39a", bay_gio=1000.0 + _W39)[0] is True,
+)
+
+# (D06) Luot bi tu choi KHONG duoc ghi: bam lai giua cua so nhieu lan, roi thu ngay khi
+# moc cu het han -> phai duoc phuc vu (Menh de 2.14 trong bao cao).
+_rl39.xoa_het()
+for _ in range(_n39):
+    _rl39.kiem_tra("chat", "ip:39b", bay_gio=1000.0)
+_bi_chan_giua = [_rl39.kiem_tra("chat", "ip:39b", bay_gio=1500.0)[0] for _ in range(_n39 + 2)]
+check(
+    "39b) Luot bi tu choi khong duoc ghi: bam lai giua cua so khong day lui thoi diem duoc phuc vu",
+    not any(_bi_chan_giua)
+    and _rl39.kiem_tra("chat", "ip:39b", bay_gio=1000.0 + _W39 + 1)[0] is True,
+    f"giua_cua_so={_bi_chan_giua}",
+)
+
+# (D14) Don so dem phai dung cua so DAI NHAT: nhom co cua so dai hon khong bi xoa nham
+# (va cap lai han muc) khi mot nhom cua so ngan kich hoat buoc don.
+_han_muc_goc39 = dict(_rl39.HAN_MUC)
+try:
+    _rl39.HAN_MUC["upload"] = (30, 30, 3600)
+    _rl39.xoa_het()
+    for _ in range(30):
+        _rl39.kiem_tra("upload", "user:39c", bay_gio=1000.0)
+    _rl39.kiem_tra("chat", "ip:39c", bay_gio=1700.0)          # luot duoc nhan -> chay _don_dep
+    _upload_39c = _rl39.kiem_tra("upload", "user:39c", bay_gio=1800.0)
+finally:
+    _rl39.HAN_MUC.clear()
+    _rl39.HAN_MUC.update(_han_muc_goc39)
+    _rl39.xoa_het()
+check(
+    "39c) Don so dem theo cua so dai nhat: nhom upload (3600 s) van bi chan sau khi nhom chat (600 s) kich hoat don",
+    _upload_39c[0] is False,
+    f"upload_luc_1800={_upload_39c}",
+)
+
+# (D10) Ham bo dau phai doi 'd-gach' thanh 'd': tu khoa 'phan den' phai khop tin nhan khong dau.
+_khop_39d = agent_service._khop_tu_khoa("be di phan den tu sang")
+check(
+    "39d) Bo dau doi 'đ' thanh 'd': tin nhan khong dau 'phan den' khop tu khoa 'phân đen'",
+    agent_service._bo_dau("Đi ngoài phân đen") == "di ngoai phan den"
+    and any("phân đen" in _tk for _tk in _khop_39d.values()),
+    f"khop={_khop_39d}",
+)
+
+# (D11) Ma an danh dai dung 20 ky tu hex = 80 bit; can trung ma trong bao cao dua vao do dai nay.
+_khoa_39e = b"k" * 32
+_ma_39e = _xdl39.ma_an_danh("be", 1, _khoa_39e)
+check(
+    "39e) Ma an danh: dung 20 ky tu hex (80 bit), dung cong thuc HMAC-SHA256('be:<id>')",
+    len(_ma_39e) == 20
+    and all(_c in "0123456789abcdef" for _c in _ma_39e)
+    and _ma_39e == _hmac39.new(_khoa_39e, b"be:1", _hashlib39.sha256).hexdigest()[:20],
+    f"ma={_ma_39e!r}",
+)
+
+# (D13) Nguong xu huong la 0,5: Delta = 0,4167 (day 2,2,3 | 3,3,2,3) KHONG duoc goi la doi,
+# Delta = 0,5 dung bien (day 2,2 | 3,2) thi co.
+# Ghi chu: quy tac nguong se duoc thay bang permutation test (Muc 2.3.5 cua bao cao); khi
+# do hai bai nay phai viet lai cung luc voi 16c/16e.
+BE_39F = _them_be(FIXTURE_PARENT_ID, "Be Bien Nguong")
+for _so_ngay, _nhan in zip(range(13, 6, -1), (2, 2, 3, 3, 3, 2, 3)):
+    _them_ca(BE_39F, _so_ngay, nhan=_nhan)
+BE_39G = _them_be(FIXTURE_PARENT_ID, "Be Dung Bien")
+for _so_ngay, _nhan in zip(range(10, 6, -1), (2, 2, 3, 2)):
+    _them_ca(BE_39G, _so_ngay, nhan=_nhan)
+_xh_39f = (goi_tool(P_PARENT, "tra_cuu_xu_huong_cua_be", BE_39F, 14).get("xu_huong") or {})
+_xh_39g = (goi_tool(P_PARENT, "tra_cuu_xu_huong_cua_be", BE_39G, 14).get("xu_huong") or {})
+check(
+    "39f) Nguong xu huong dung 0,5: Delta 0,42 la 'khong doi ro ret', Delta 0,5 la 'dich ve phia long hon'",
+    _xh_39f.get("chieu") == "khong_doi_ro_ret" and _xh_39g.get("chieu") == "dich_ve_phia_long_hon",
+    f"39f={_xh_39f} 39g={_xh_39g}",
 )
 
 # =====================================================================
