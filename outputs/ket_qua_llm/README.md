@@ -32,8 +32,9 @@ Trường `git_commit` nhận các giá trị khác nhau nhưng mã được đo
 | `ac44bb3` | 30/09 | So với `2dc2999` chỉ thêm các tệp kết quả của ngày 29/09 và sửa README; không đổi dòng mã nào. |
 | `b110825` | 01/10 | So với `aabc4c7`: thêm 6 kiểm tra vào `tests/verify_task.py`, script `danh_gia/kiem_thu_dot_bien.py` và sửa README. `app/` và `danh_gia/eval_agent.py` không đổi. |
 | `d57a99f` | 03/10 | So với `b110825` chỉ thêm tệp kết quả ngày 01/10 và sửa README; không đổi dòng mã nào. |
+| `31a3850` | 04/10 | So với `d57a99f` chỉ thêm tệp kết quả ngày 03/10 và sửa README; không đổi dòng mã nào. |
 
-## Tiến độ (cập nhật 03/10/2026)
+## Tiến độ (hoàn tất 04/10/2026)
 
 Số kịch bản đã đo được trên 8, theo từng lượt:
 
@@ -42,7 +43,7 @@ Số kịch bản đã đo được trên 8, theo từng lượt:
 | gemini-3.5-flash-lite | 8/8 | 8/8 | 8/8 | 24/24 |
 | gemini-3.6-flash | 8/8 | 8/8 | 8/8 | 24/24 |
 | gemini-3.7-flash | 8/8 | 8/8 | 8/8 | 24/24 |
-| gemini-3.8-flash | 8/8 | 8/8 | 6/8 | 22/24 |
+| gemini-3.8-flash | 8/8 | 8/8 | 8/8 | 24/24 |
 
 ## Các tệp theo ngày đo
 
@@ -58,6 +59,7 @@ Số kịch bản đã đo được trên 8, theo từng lượt:
 | 01/10 | `lan3_gemini-3.8-flash_tiep2` (S1, S2; S3 dừng vì hết hạn mức). Tệp được ghi khoảng 01:00 ngày 02/10, vẫn trong chu kỳ hạn mức ngày bắt đầu lúc 14:00 ngày 01/10. |
 | 02/10 | Không có đợt đo (ứng dụng chạy routine không mở trong ngày). |
 | 03/10 | `lan3_gemini-3.8-flash_tiep3` (S3–S6; S7 dừng vì hết hạn mức). |
+| 04/10 | `lan3_gemini-3.8-flash_tiep4` (S7, S8). Đợt đo hoàn tất: cả 4 mô hình đủ 24/24. |
 
 ## Cấu trúc một tệp
 
