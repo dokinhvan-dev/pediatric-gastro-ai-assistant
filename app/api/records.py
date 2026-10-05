@@ -154,7 +154,7 @@ def _validate_image_bytes(file_bytes: bytes) -> str:
     return ALLOWED_IMAGE_FORMATS[image_format]
 
 
-@router.post("/upload")
+@router.post("/upload", status_code=201)
 def upload_stool_observation(
         request: Request,
         file: UploadFile = File(...),
@@ -625,6 +625,36 @@ def _assert_transition(current: str, target: str) -> None:
         )
 
 
+def _chuyen_trang_thai(db, record: StoolRecord, target: str, gia_tri: dict) -> None:
+    """Ghi bước chuyển trạng thái bằng MỘT câu UPDATE có điều kiện (so sánh rồi mới ghi).
+
+    Kiểm _assert_transition rồi mới gán thuộc tính là hai bước tách rời: hai worker gửi kết
+    quả cho cùng một ca gần như cùng lúc có thể cùng đọc 'processing', cùng qua bước kiểm,
+    và người ghi sau đè kết quả người ghi trước, cả hai đều nhận 200. Mệnh đề "kết quả suy
+    luận chỉ được ghi một lần" trong báo cáo sẽ chỉ đúng khi các lời gọi tuần tự.
+
+    Ở đây điều kiện "trạng thái vẫn là trạng thái vừa đọc" nằm ngay trong câu UPDATE, nên
+    cơ sở dữ liệu tự bảo đảm chỉ một bên thắng; bên còn lại cập nhật 0 dòng và nhận 409.
+    """
+    da_doc = record.inference_status
+    so_dong = (
+        db.query(StoolRecord)
+        .filter(StoolRecord.id == record.id, StoolRecord.inference_status == da_doc)
+        .update({**gia_tri, "inference_status": target}, synchronize_session=False)
+    )
+    if so_dong == 0:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Trạng thái của ca đã bị thay đổi bởi một yêu cầu khác trong lúc xử lý "
+                f"(không còn là '{da_doc}'). Hãy đọc lại ca rồi thử lại nếu cần."
+            ),
+        )
+    db.commit()
+    db.refresh(record)
+
+
 def _get_record_or_404(db, record_id: int) -> StoolRecord:
     record = db.query(StoolRecord).filter(StoolRecord.id == record_id).first()
     if not record:
@@ -681,13 +711,14 @@ def submit_inference_result(
         gating = uncertainty.evaluate(payload.ai_confidence)
 
         try:
-            record.ai_predicted_class = payload.ai_predicted_class
-            record.ai_confidence = payload.ai_confidence
-            record.is_uncertain = gating["is_uncertain"]
-            record.review_status = gating["review_status"]
-            record.inference_status = "completed"
-            db.commit()
-            db.refresh(record)
+            _chuyen_trang_thai(db, record, "completed", {
+                "ai_predicted_class": payload.ai_predicted_class,
+                "ai_confidence": payload.ai_confidence,
+                "is_uncertain": gating["is_uncertain"],
+                "review_status": gating["review_status"],
+            })
+        except HTTPException:
+            raise
         except Exception:
             db.rollback()
             raise HTTPException(status_code=500, detail="Không thể lưu kết quả suy luận, vui lòng thử lại.")
@@ -725,9 +756,9 @@ def mark_inference_started(record_id: int, _worker: str = Depends(require_servic
         _assert_transition(record.inference_status, "processing")
 
         try:
-            record.inference_status = "processing"
-            db.commit()
-            db.refresh(record)
+            _chuyen_trang_thai(db, record, "processing", {})
+        except HTTPException:
+            raise
         except Exception:
             db.rollback()
             raise HTTPException(status_code=500, detail="Không thể cập nhật trạng thái, vui lòng thử lại.")
@@ -764,15 +795,16 @@ def mark_inference_failed(
         _assert_transition(record.inference_status, "failed")
 
         try:
-            record.inference_status = "failed"
-            record.inference_error = reason
             # Ca thất bại tuyệt đối không được giữ lại kết quả nửa vời:
             # CHECK constraint chk_inference_status_and_result cũng bắt buộc điều này.
-            record.ai_predicted_class = None
-            record.ai_confidence = None
-            record.is_uncertain = False
-            db.commit()
-            db.refresh(record)
+            _chuyen_trang_thai(db, record, "failed", {
+                "inference_error": reason,
+                "ai_predicted_class": None,
+                "ai_confidence": None,
+                "is_uncertain": False,
+            })
+        except HTTPException:
+            raise
         except Exception:
             db.rollback()
             raise HTTPException(status_code=500, detail="Không thể ghi nhận thất bại, vui lòng thử lại.")
@@ -801,10 +833,9 @@ def retry_inference(record_id: int, _worker: str = Depends(require_service_token
         _assert_transition(record.inference_status, "queued")
 
         try:
-            record.inference_status = "queued"
-            record.inference_error = None
-            db.commit()
-            db.refresh(record)
+            _chuyen_trang_thai(db, record, "queued", {"inference_error": None})
+        except HTTPException:
+            raise
         except Exception:
             db.rollback()
             raise HTTPException(status_code=500, detail="Không thể đưa ca trở lại hàng chờ, vui lòng thử lại.")

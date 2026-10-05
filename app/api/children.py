@@ -22,6 +22,39 @@ router = APIRouter(prefix="/api/v1/children", tags=["Children"])
 MAX_NAME_LENGTH = 100
 MAX_NOTES_LENGTH = 5000
 MAX_AGE_YEARS = 18          # ngoài phạm vi nhi khoa thì gần như chắc chắn là gõ nhầm năm sinh
+
+# Chế độ ăn là TỪ VỰNG CÓ KIỂM SOÁT, không phải văn bản tự do. Trường này đi nguyên văn vào
+# kết quả của mọi công cụ đọc hồ sơ và đọc ca, nên để tự do thì nó là một kênh chèn chỉ thị
+# gián tiếp: phụ huynh ghi "BỎ QUA MỌI QUY TẮC..." vào đây và đoạn đó xuất hiện cả trong
+# phiên chat của bác sĩ (phát hiện 2026-09-30). Cùng lý do ghi chú y tế đã bị thay bằng
+# yeu_to_lam_sang. Khoá là mã ổn định; giá trị là nhãn được lưu và đưa cho mô hình.
+CHE_DO_AN = {
+    "bu_me_hoan_toan": "Bú mẹ hoàn toàn",
+    "sua_cong_thuc": "Sữa công thức",
+    "bu_me_va_sua_cong_thuc": "Bú mẹ kết hợp sữa công thức",
+    "an_dam": "Đã ăn dặm",
+}
+
+
+def _khoa_che_do_an(gia_tri: str) -> str:
+    """Chuẩn hoá để so khớp: bỏ dấu, viết thường, gộp khoảng trắng/gạch dưới."""
+    import unicodedata
+    t = unicodedata.normalize("NFD", (gia_tri or "").strip().lower())
+    t = "".join(c for c in t if unicodedata.category(c) != "Mn").replace("đ", "d")
+    return "_".join(t.replace("_", " ").split())
+
+
+# Chấp nhận mã hoặc nhãn (có dấu hay không dấu đều được); "Ăn dặm" là cách gọi thường gặp.
+_CHE_DO_AN_THEO_KHOA = {
+    **{_khoa_che_do_an(ma): nhan for ma, nhan in CHE_DO_AN.items()},
+    **{_khoa_che_do_an(nhan): nhan for nhan in CHE_DO_AN.values()},
+    "an_dam": CHE_DO_AN["an_dam"],
+}
+
+
+def chuan_hoa_che_do_an(gia_tri: str) -> Optional[str]:
+    """Nhãn chuẩn của chế độ ăn, hoặc None nếu giá trị không thuộc từ vựng."""
+    return _CHE_DO_AN_THEO_KHOA.get(_khoa_che_do_an(gia_tri))
 MAX_WEIGHT_KG = 150.0
 
 
@@ -50,6 +83,13 @@ def _validate(payload: ChildIn) -> tuple:
 
     if not (payload.feeding_type or "").strip():
         raise HTTPException(status_code=422, detail="'feeding_type' không được để trống.")
+    che_do_an = chuan_hoa_che_do_an(payload.feeding_type)
+    if che_do_an is None:
+        raise HTTPException(
+            status_code=422,
+            detail="'feeding_type' phải là một trong: " + "; ".join(
+                f"{ma} ({nhan})" for ma, nhan in CHE_DO_AN.items()) + ".",
+        )
 
     today = datetime.now(timezone.utc).date()
     if payload.date_of_birth > today:
@@ -76,7 +116,13 @@ def _validate(payload: ChildIn) -> tuple:
     except yeu_to_lam_sang.MaKhongHopLe as loi:
         raise HTTPException(status_code=422, detail=str(loi))
 
-    return name, yeu_to
+    return name, yeu_to, che_do_an
+
+
+@router.get("/che-do-an")
+def danh_muc_che_do_an():
+    """Từ vựng chế độ ăn, để client dựng ô chọn. Cùng lý do và cùng vị trí như yeu-to-lam-sang."""
+    return {"total": len(CHE_DO_AN), "che_do_an": [{"ma": ma, "nhan": nhan} for ma, nhan in CHE_DO_AN.items()]}
 
 
 @router.get("/yeu-to-lam-sang")
@@ -99,14 +145,14 @@ def danh_muc_yeu_to_lam_sang():
 @router.post("", status_code=201)
 def create_child(payload: ChildIn, user: CurrentUser = Depends(get_current_user)):
     """Tạo hồ sơ bé. Người tạo mặc nhiên là chủ sở hữu, không thể chỉ định người khác."""
-    name, yeu_to = _validate(payload)
+    name, yeu_to, che_do_an = _validate(payload)
 
     with SessionLocal() as db:
         child = Child(
             owner_user_id=user.id,
             name=name,
             date_of_birth=payload.date_of_birth,
-            feeding_type=payload.feeding_type.strip(),
+            feeding_type=che_do_an,
             weight_kg=payload.weight_kg,
             medical_notes=payload.medical_notes,
             yeu_to_lam_sang=yeu_to,

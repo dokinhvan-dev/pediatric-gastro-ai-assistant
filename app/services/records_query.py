@@ -194,12 +194,46 @@ SO_NGAY_TOI_DA = 180
 # cửa sổ phải có ít nhất 2 ca. Dưới ngưỡng đó thì thứ tính ra được là nhiễu chứ
 # không phải xu hướng — mà nhiễu được model kể lại bằng giọng tự tin cho một phụ
 # huynh đang lo thì còn tệ hơn là không trả lời.
-TOI_THIEU_CA_CO_NHAN = 4
+#
+# Ngưỡng 7 không chọn tay: với permutation test ở mức 0,05, giá trị p nhỏ nhất đạt được là
+# 1/3 khi có 4 ca và 0,1 khi có 5–6 ca, nên dưới 7 ca kiểm định KHÔNG BAO GIỜ kết luận được
+# (Mệnh đề kiểm soát báo động giả, Mục 2.3.5 của báo cáo).
+TOI_THIEU_CA_CO_NHAN = 7
 TOI_THIEU_MOI_NUA = 2
 
-# Chênh lệch dưới mức này trên trục 1-4 coi như không đổi. Không có ngưỡng thì mọi
-# dao động lặt vặt đều được báo cáo thành "đang chuyển biến".
-NGUONG_COI_LA_DOI = 0.5
+# Mức ý nghĩa của permutation test. Thay cho quy tắc cũ |Δ| >= 0,5: quy tắc đó báo "đã
+# chuyển biến" với xác suất 0,31–0,83 khi bé KHÔNG hề thay đổi (tính chính xác bằng duyệt
+# toàn bộ dãy nhãn, danh_gia/phan_tich_co_so_toan.py).
+MUC_Y_NGHIA = 0.05
+
+
+def gia_tri_p_hoan_vi(day_nhan: list, h: int) -> float:
+    """Giá trị p CHÍNH XÁC của permutation test cho câu hỏi "h ca đầu có khác các ca sau không".
+
+    Dưới giả thuyết bé không đổi, mọi cách xếp lại dãy nhãn có cùng xác suất. Thống kê là
+    |h·T − n·S_A| với T là tổng cả dãy và S_A là tổng nhãn của một tập h vị trí; p là tỉ lệ
+    các tập h vị trí cho thống kê ít nhất bằng giá trị quan sát. Không lấy mẫu ngẫu nhiên:
+    đếm tổ hợp theo số lần xuất hiện của từng nhãn, nên kết quả tất định và đúng tuyệt đối.
+    """
+    from math import comb
+
+    n = len(day_nhan)
+    tong = sum(day_nhan)
+    quan_sat = abs(h * tong - n * sum(day_nhan[:h]))
+    dem = {}
+    for v in day_nhan:
+        dem[v] = dem.get(v, 0) + 1
+    # cach[s] = số tập h vị trí có tổng nhãn s, dựng dần theo từng giá trị nhãn.
+    cach = {(0, 0): 1}                     # (số phần tử đã chọn, tổng) -> số cách
+    for v, c in dem.items():
+        moi = {}
+        for (k, s), so in cach.items():
+            for j in range(0, min(c, h - k) + 1):
+                khoa = (k + j, s + j * v)
+                moi[khoa] = moi.get(khoa, 0) + so * comb(c, j)
+        cach = moi
+    thoa = sum(so for (k, s), so in cach.items() if k == h and abs(h * tong - n * s) >= quan_sat)
+    return thoa / comb(n, h)
 
 
 def nhan_da_duyet(db, record_ids) -> dict:
@@ -345,16 +379,21 @@ def tong_hop_xu_huong(db, principal, child_id: int, so_ngay: int = SO_NGAY_MAC_D
     tb_cu = _vi_tri_trung_binh(nua_cu)
     tb_moi = _vi_tri_trung_binh(nua_moi)
     chenh = round(tb_moi - tb_cu, 2)
+    p = gia_tri_p_hoan_vi(nua_cu + nua_moi, len(nua_cu))
 
-    if abs(chenh) < NGUONG_COI_LA_DOI:
+    # Chiều chỉ được nói ra khi kiểm định cho phép; so sánh trên tổng nguyên (không qua số
+    # làm tròn) để dấu của chênh lệch luôn chính xác.
+    if p > MUC_Y_NGHIA:
         chieu = "khong_doi_ro_ret"
-    elif chenh > 0:
+    elif sum(nua_moi) * len(nua_cu) > sum(nua_cu) * len(nua_moi):
         chieu = "dich_ve_phia_long_hon"
     else:
         chieu = "dich_ve_phia_cung_hon"
 
     ket["xu_huong"] = {
         "chieu": chieu,
+        "gia_tri_p": round(p, 4),
+        "muc_y_nghia": MUC_Y_NGHIA,
         "vi_tri_trung_binh_nua_cu": tb_cu,
         "vi_tri_trung_binh_nua_moi": tb_moi,
         "chenh_lech": chenh,

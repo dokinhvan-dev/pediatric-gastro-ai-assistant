@@ -7,7 +7,7 @@ sửa. Với mỗi đột biến, script chạy lại toàn bộ bộ kiểm tra
 thêm ít nhất một kiểm tra so với bản sao chưa đột biến, hoặc làm bộ kiểm tra dừng giữa chừng. Không gọi Gemini
 (bộ kiểm tra tự đặt khoá API rỗng), không đụng data/ thật.
 
-Danh sách 19 đột biến được dựng ngày 2026-10-01, rải trên các thành phần chính, gồm bốn đột biến nhắm thẳng
+Danh sách gồm 19 đột biến dựng ngày 2026-10-01 (D01–D19), rải trên các thành phần chính, gồm bốn đột biến nhắm thẳng
 vào bất biến B1–B4. D07 và D12 là đột biến tương đương (không đổi hành vi quan sát được), nên không kiểm tra
 chức năng nào bắt được chúng; chúng được giữ lại để thấy giới hạn của phương pháp.
 """
@@ -49,8 +49,8 @@ DOT_BIEN = [
      ".hexdigest()[:20]", ".hexdigest()[:10]"),
     ("D12 authz: bỏ nhánh child_id None (tương đương)", "app/services/authz.py",
      "        if record.child_id is None:\n            return False\n", "        if False:\n            return False\n"),
-    ("D13 xu hướng: ngưỡng 0,5 thành 0,4", "app/services/records_query.py",
-     "NGUONG_COI_LA_DOI = 0.5", "NGUONG_COI_LA_DOI = 0.4"),
+    ("D13 xu hướng: mức ý nghĩa 0,05 thành 0,5", "app/services/records_query.py",
+     "MUC_Y_NGHIA = 0.05", "MUC_Y_NGHIA = 0.5"),
     ("D14 dọn sổ đếm: cửa sổ dài nhất thành ngắn nhất", "app/services/rate_limit.py",
      "cua_so_dai_nhat = max((c for _, _, c in HAN_MUC.values()), default=CUA_SO_MAC_DINH)",
      "cua_so_dai_nhat = min((c for _, _, c in HAN_MUC.values()), default=CUA_SO_MAC_DINH)"),
@@ -64,6 +64,19 @@ DOT_BIEN = [
      "    return _chua_cum_nao(cau_tra_loi, CUM_TU_PHAN_LUONG)", "    return set()"),
     ("D19 B4: lưới an toàn không thêm lời dặn đi khám", "app/services/agent_service.py",
      "    return cau_tra_loi + _dung_luoi_an_toan(khop)", "    return cau_tra_loi"),
+    ("D20 khớp từ khoá: bỏ chuẩn hoá NFC", "app/services/agent_service.py",
+     'thap = unicodedata.normalize("NFC", tin_nhan or "").lower()', 'thap = (tin_nhan or "").lower()'),
+    ("D21 xu hướng: tối thiểu 7 ca thành 4", "app/services/records_query.py",
+     "TOI_THIEU_CA_CO_NHAN = 7", "TOI_THIEU_CA_CO_NHAN = 4"),
+    ("D22 ghi kết quả suy luận: bỏ điều kiện trạng thái trong UPDATE", "app/api/records.py",
+     ".filter(StoolRecord.id == record.id, StoolRecord.inference_status == da_doc)",
+     ".filter(StoolRecord.id == record.id)"),
+    ("D23 chế độ ăn: bỏ kiểm từ vựng", "app/api/children.py",
+     "    if che_do_an is None:\n", "    if False:\n"),
+    ("D24 Gemini lỗi: không kèm cảnh báo dấu hiệu nguy hiểm", "app/api/chat.py",
+     "return thong_bao + agent_service._dung_luoi_an_toan(khop) if khop else thong_bao", "return thong_bao"),
+    ("D25 điều phối công cụ: bỏ kiểm chữ ký trước khi gọi", "app/services/agent_service.py",
+     "        inspect.signature(ham).bind(**args)\n", "        pass\n"),
 ]
 
 

@@ -645,7 +645,11 @@ def _khop_tu_khoa(tin_nhan: str) -> dict:
         Giới hạn còn lại: tin nhắn trộn có dấu và không dấu, hoặc chỉ nói "mau" không dấu,
         sẽ không khớp.
     """
-    thap = (tin_nhan or "").lower()
+    # Chuẩn hoá NFC TRƯỚC mọi so khớp: một số bộ gõ (vd tuỳ chọn "Unicode tổ hợp" của Unikey)
+    # gửi dấu thành ký tự riêng (dạng NFD), khi đó "máu" dựng sẵn trong bộ từ khoá không phải
+    # chuỗi con của tin nhắn và lưới cảnh báo im lặng. Bổ đề σ trong báo cáo giả định NFC.
+    import unicodedata
+    thap = unicodedata.normalize("NFC", tin_nhan or "").lower()
     co_dau = thap != _bo_dau(thap)
     khong_dau = _bo_dau(thap)
 
@@ -1209,12 +1213,18 @@ def _goi_cong_cu(principal, ten_cong_cu: str, args: dict) -> dict:
         return {"error": f"Công cụ '{ten_cong_cu}' không khả dụng trong phiên này."}
 
     logger.info("[%s] goi %s(%s)", nhan, ten_cong_cu, args)
+    # Kiểm tham số TRƯỚC khi gọi, bằng chữ ký của hàm. Trước đây "except TypeError" bọc cả
+    # lời gọi, nên một TypeError do lỗi lập trình BÊN TRONG công cụ cũng bị báo nhầm thành
+    # "tham số không hợp lệ" và không để lại vết lỗi nào trong log.
+    import inspect
     try:
-        return ham(**args)
+        inspect.signature(ham).bind(**args)
     except TypeError:
         # Model điền sai tên tham số hoặc thiếu tham số bắt buộc.
         logger.warning("[%s] tham so sai cho %s: %s", nhan, ten_cong_cu, sorted(args))
         return {"error": f"Tham số gọi '{ten_cong_cu}' không hợp lệ."}
+    try:
+        return ham(**args)
     except Exception:
         # Lỗi thật (database hỏng, v.v.). Ghi đủ vết để truy, nhưng thứ trả về cho model
         # chỉ là một câu chung: chuỗi exception có thể chứa câu SQL hoặc đường dẫn máy chủ,

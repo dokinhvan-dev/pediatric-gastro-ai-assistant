@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 
 from setup_database import SessionLocal
 from app.api.deps import chan_neu_qua_han_muc, get_optional_principal
-from app.services import chat_history, dong_y
+from app.services import agent_service, chat_history, dong_y
 from app.services.agent_service import (
     ChuaCauHinhAI, HetHanMucNgay, LoiCauHinhAI, TroLyBanTam, run_agent_chat_chi_tiet,
 )
@@ -119,6 +119,18 @@ def thong_bao_du_lieu():
     return dong_y.thong_bao()
 
 
+def _kem_canh_bao_do(thong_bao: str, tin_nhan: str) -> str:
+    """Khi trợ lý KHÔNG trả lời được (Gemini lỗi, hết hạn mức, chưa cấu hình), vẫn trả đúng
+    đoạn cảnh báo dấu hiệu nguy hiểm nếu tin nhắn khớp từ khoá.
+
+    Bộ phát hiện từ khoá không cần Gemini. Trước đây phụ huynh nhắn "bé đi ngoài ra máu"
+    đúng lúc Gemini quá tải chỉ nhận thông báo 503 chung chung; giờ họ nhận thêm lời dặn
+    cụ thể cho đúng dấu hiệu đó, giống hệt đoạn lưới an toàn của luồng bình thường.
+    """
+    khop = agent_service._khop_tu_khoa(tin_nhan)
+    return thong_bao + agent_service._dung_luoi_an_toan(khop) if khop else thong_bao
+
+
 @router.post("/chat", response_model=ChatResponse)
 def handle_chat(
         request: ChatRequest,
@@ -166,11 +178,11 @@ def handle_chat(
         # "thử lại sau" ở đây là một lời nói sai khiến phụ huynh thử lại mãi.
         raise HTTPException(
             status_code=503,
-            detail=(
+            detail=_kem_canh_bao_do((
                 "Trợ lý AI hiện chưa được bật trên hệ thống này. Các chức năng khác vẫn dùng "
                 "bình thường. Nếu bé đang có dấu hiệu bất thường cần xử trí ngay, hãy liên hệ "
                 "trực tiếp bác sĩ."
-            ),
+            ), request.message),
         )
     except LoiCauHinhAI:
         # Model đã bị ngừng, hoặc khoá API sai/bị thu hồi. Cùng tinh thần với ChuaCauHinhAI:
@@ -179,11 +191,11 @@ def handle_chat(
         # hành, và log đã ghi đủ chi tiết kèm cách sửa.
         raise HTTPException(
             status_code=503,
-            detail=(
+            detail=_kem_canh_bao_do((
                 "Trợ lý AI đang tạm ngưng vì một sự cố cấu hình phía hệ thống, cần quản trị viên "
                 "xử lý — thử lại lúc này sẽ chưa được. Các chức năng khác vẫn dùng bình thường. "
                 "Nếu bé đang có dấu hiệu bất thường cần xử trí ngay, hãy liên hệ trực tiếp bác sĩ."
-            ),
+            ), request.message),
         )
     except HetHanMucNgay as het:
         # Đặt TRƯỚC nhánh TroLyBanTam vì đây là con của nó. Khác ở chỗ phải nói THẬT: không
@@ -192,11 +204,11 @@ def handle_chat(
         gio = het.mo_lai_luc.astimezone(_GIO_VIET_NAM).strftime("%H:%M ngày %d/%m")
         raise HTTPException(
             status_code=503,
-            detail=(
+            detail=_kem_canh_bao_do((
                 "Trợ lý AI đã dùng hết lượt trong ngày của hệ thống. Bạn có thể dùng lại "
                 f"sau {gio} (giờ Việt Nam). Các chức năng khác vẫn dùng bình thường. "
                 "Nếu bé đang có dấu hiệu bất thường cần xử trí ngay, hãy liên hệ trực tiếp bác sĩ."
-            ),
+            ), request.message),
             headers={"Retry-After": str(max(int(het.cho_giay), 1))},
         )
     except TroLyBanTam as ban:
@@ -211,10 +223,10 @@ def handle_chat(
         cho = int(ban.cho_giay) if ban.cho_giay else RETRY_AFTER_MAC_DINH
         raise HTTPException(
             status_code=503,
-            detail=(
+            detail=_kem_canh_bao_do((
                 "Trợ lý AI đang quá tải, vui lòng thử lại sau ít phút. "
                 "Nếu bé đang có dấu hiệu bất thường cần xử trí ngay, hãy liên hệ trực tiếp bác sĩ."
-            ),
+            ), request.message),
             headers={"Retry-After": str(max(cho, 1))},
         )
     except Exception:
@@ -222,7 +234,7 @@ def handle_chat(
         # câu SQL, hoặc đường dẫn file trên máy chủ.
         raise HTTPException(
             status_code=500,
-            detail="Trợ lý AI tạm thời không phản hồi được, vui lòng thử lại sau."
+            detail=_kem_canh_bao_do("Trợ lý AI tạm thời không phản hồi được, vui lòng thử lại sau.", request.message)
         )
 
     # Chỉ ghi khi đã CÓ câu trả lời trong tay. Mọi nhánh lỗi ở trên đều đã raise, nên
