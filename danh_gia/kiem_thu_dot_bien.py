@@ -7,9 +7,10 @@ sửa. Với mỗi đột biến, script chạy lại toàn bộ bộ kiểm tra
 thêm ít nhất một kiểm tra so với bản sao chưa đột biến, hoặc làm bộ kiểm tra dừng giữa chừng. Không gọi Gemini
 (bộ kiểm tra tự đặt khoá API rỗng), không đụng data/ thật.
 
-Danh sách gồm 19 đột biến dựng ngày 2026-10-01 (D01–D19), rải trên các thành phần chính, gồm bốn đột biến nhắm thẳng
-vào bất biến B1–B4. D07 và D12 là đột biến tương đương (không đổi hành vi quan sát được), nên không kiểm tra
-chức năng nào bắt được chúng; chúng được giữ lại để thấy giới hạn của phương pháp.
+Danh sách gồm 25 đột biến: D01–D19 dựng ngày 2026-10-01, rải trên các thành phần chính, gồm bốn đột biến nhắm
+thẳng vào bất biến B1–B4; D20–D25 dựng ngày 2026-10-05, mỗi đột biến đảo ngược một bản sửa lỗi sau đợt đo.
+D07 và D12 là đột biến tương đương (không đổi hành vi quan sát được), nên không kiểm tra chức năng nào bắt
+được chúng; chúng được giữ lại để thấy giới hạn của phương pháp.
 """
 import concurrent.futures
 import os

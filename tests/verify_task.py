@@ -6673,9 +6673,11 @@ with SessionLocal() as _db_a:
     try:
         _rec40._chuyen_trang_thai(_db_a, _ban_cu, "completed",
                                   {"ai_predicted_class": 4, "ai_confidence": 0.99,
-                                   "is_uncertain": False, "review_status": "pending_review"})
+                                   "is_uncertain": False, "review_status": "pending"})
     except _HTTPException40 as _loi40:
         _ma_409 = _loi40.status_code
+    except Exception as _loi40:                       # loi khac cung la truot, nhung bao co ten
+        _ma_409 = f"{type(_loi40).__name__}: {_loi40}"[:120]
 with SessionLocal() as _db_kt:
     _sau40 = _db_kt.get(StoolRecord, _id40)
     _nhan_sau40 = (_sau40.inference_status, _sau40.ai_predicted_class)
