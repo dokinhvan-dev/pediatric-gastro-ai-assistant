@@ -5320,6 +5320,20 @@ check(
     f"status={_r30w.status_code}",
 )
 
+# Ghi chu JPEG (marker COM) la mot cho tru khac cua sieu du lieu: Pillow tu ghi lai
+# info["comment"] khi luu, nen chi ma hoa lai thi KHONG du. Phat hien ngay 2026-10-08.
+_jpg_cmt_buf = BytesIO()
+Image.new("RGB", (300, 300), (90, 120, 60)).save(
+    _jpg_cmt_buf, format="JPEG", comment=b"Chup tai nha so 12 duong ABC")
+_r30c = _upload(_jpg_cmt_buf.getvalue(), "d.jpg", "image/jpeg")
+_luu_30c = _file_da_luu(_r30c.json()["data"]["record_id"]) if _r30c.status_code == 201 else b""
+check(
+    "30f2) JPEG: ghi chu (COM) cung bi xoa, ke ca khi lam sach lai luc tra anh",
+    _r30c.status_code == 201 and b"duong ABC" not in _luu_30c
+    and b"duong ABC" not in _lsa.lam_sach(_jpg_cmt_buf.getvalue()),
+    f"status={_r30c.status_code}",
+)
+
 # --- Endpoint tra anh ---
 _r_anh_chu = client.get(f"/api/v1/records/{_RID_30}/anh", headers=PARENT_H)
 check(

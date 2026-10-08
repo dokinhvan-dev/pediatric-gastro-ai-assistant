@@ -85,6 +85,10 @@ def lam_sach(file_bytes: bytes) -> bytes:
             # ngang, nhưng thà vậy còn hơn từ chối một ảnh hợp lệ chỉ vì thẻ phụ bị hỏng.
             anh = goc.copy()
         anh.load()
+    # Pillow ghi lại info["comment"] khi lưu JPEG nếu không bị xoá: ghi chú do máy ảnh hay
+    # phần mềm chèn (có thể chứa địa chỉ, tên người chụp) sẽ đi nguyên theo ảnh "đã làm sạch".
+    # ICC và độ trong suốt đã được đọc riêng ở trên, nên bỏ toàn bộ info là an toàn.
+    anh.info = {}
 
     ra = BytesIO()
     tuy_chon = {}

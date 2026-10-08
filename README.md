@@ -16,7 +16,7 @@ Mô hình học sâu phân loại ảnh và XAI thuộc repo riêng của thành
   - chặn phán quyết phân luồng;
   - lưới cảnh báo dấu hiệu nguy hiểm;
   - chuẩn hoá về văn bản thường.
-- **Kiểm thử:** 466 kiểm tra tự động, không cần mạng hay khoá API. Chất lượng của chính bộ kiểm tra được đo bằng kiểm thử đột biến (25 đột biến, chạy lại được).
+- **Kiểm thử:** 467 kiểm tra tự động, không cần mạng hay khoá API. Chất lượng của chính bộ kiểm tra được đo bằng kiểm thử đột biến (26 đột biến, chạy lại được).
 - **Chưa nối mô hình phân loại ảnh.** Backend đã có sẵn các endpoint `inference-*` cho worker suy luận, xác thực bằng `X-Service-Token`. Khi mô hình sẵn sàng, worker chỉ cần gọi các endpoint này.
 - **Đánh giá trên Gemini thật mới đo được một phần**, do hạn mức ngày của gói miễn phí. Kết quả đã đo nằm trong `outputs/ket_qua_llm/`; quy ước tên tệp và tiến độ đo được ghi trong [`outputs/ket_qua_llm/README.md`](outputs/ket_qua_llm/README.md).
 - **Mọi dữ liệu trong repo là dữ liệu kiểm thử tự tạo.** Không có dữ liệu bệnh nhân thật.
@@ -50,7 +50,7 @@ pediatric-gastro-ai-assistant/
 │   ├── don_du_lieu_qua_han.py       # Dọn tin nhắn quá hạn, token hết hạn (cron)
 │   └── xuat_du_lieu_huan_luyen.py   # Xuất dữ liệu huấn luyện ẩn danh cho phần mô hình
 ├── tests/
-│   └── verify_task.py       # 466 kiểm tra tự động (40 mục), chạy trên DB và thư mục tạm
+│   └── verify_task.py       # 467 kiểm tra tự động (40 mục), chạy trên DB và thư mục tạm
 ├── danh_gia/                # Đánh giá
 │   ├── eval_agent.py        # 8 kịch bản trên Gemini thật (tốn hạn mức)
 │   ├── danh_gia_luoi_canh_bao.py    # Lưới cảnh báo trên 67 câu có nhãn, so với 2 chiến lược khác
@@ -127,9 +127,9 @@ Sau đó mở tài liệu API tương tác tại <http://127.0.0.1:8000/docs>. N
 uv run python tests/verify_task.py
 ```
 
-Bộ kiểm tra tự dựng database tạm và mô hình giả. Nó không cần mạng, không cần khoá API, và không đụng vào `data/`. Kết quả mong đợi là `466/466 PASS`.
+Bộ kiểm tra tự dựng database tạm và mô hình giả. Nó không cần mạng, không cần khoá API, và không đụng vào `data/`. Kết quả mong đợi là `467/467 PASS`.
 
-Để đo chất lượng của chính bộ kiểm tra, chạy kiểm thử đột biến. Script chèn từng lỗi trong 25 lỗi nhỏ vào một bản sao của mã (repo không bị sửa) rồi xem bộ kiểm tra có bắt được không; mất vài phút. Kết quả hiện tại là 23/25; hai đột biến còn lại là đột biến tương đương (không đổi hành vi):
+Để đo chất lượng của chính bộ kiểm tra, chạy kiểm thử đột biến. Script chèn từng lỗi trong 26 lỗi nhỏ vào một bản sao của mã (repo không bị sửa) rồi xem bộ kiểm tra có bắt được không; mất vài phút. Kết quả hiện tại là 24/26; hai đột biến còn lại là đột biến tương đương (không đổi hành vi):
 
 ```bash
 uv run python danh_gia/kiem_thu_dot_bien.py
