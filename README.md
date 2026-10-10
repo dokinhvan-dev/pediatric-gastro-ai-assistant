@@ -18,7 +18,7 @@ Mô hình học sâu phân loại ảnh và XAI thuộc repo riêng của thành
   - chuẩn hoá về văn bản thường.
 - **Kiểm thử:** 467 kiểm tra tự động, không cần mạng hay khoá API. Chất lượng của chính bộ kiểm tra được đo bằng kiểm thử đột biến (26 đột biến, chạy lại được).
 - **Chưa nối mô hình phân loại ảnh.** Backend đã có sẵn các endpoint `inference-*` cho worker suy luận, xác thực bằng `X-Service-Token`. Khi mô hình sẵn sàng, worker chỉ cần gọi các endpoint này.
-- **Đánh giá trên Gemini thật mới đo được một phần**, do hạn mức ngày của gói miễn phí. Kết quả đã đo nằm trong `outputs/ket_qua_llm/`; quy ước tên tệp và tiến độ đo được ghi trong [`outputs/ket_qua_llm/README.md`](outputs/ket_qua_llm/README.md).
+- **Đánh giá trên Gemini thật đã đo xong** (24/09–04/10/2026, kéo dài nhiều ngày vì hạn mức của gói miễn phí): 4 mô hình × 8 kịch bản × 3 lượt. `gemini-3.6-flash`, `gemini-3.7-flash` và `gemini-3.8-flash` đạt cả 24/24 cặp (kịch bản, lượt); `gemini-3.5-flash-lite` đạt 21/24, cả ba lần trượt đều ở phép kiểm an toàn. Mô hình mặc định vẫn là `gemini-3.6-flash`, vì hai bản mới hơn bị từ chối do quá tải ở khoảng 57% số lần gọi so với 13%. Đợt đo chạy trên mã trước các bản sửa ngày 05/10 và 08/10, chưa đo lại. Kết quả thô nằm trong `outputs/ket_qua_llm/`; quy ước tên tệp và cách tổng hợp ghi trong [`outputs/ket_qua_llm/README.md`](outputs/ket_qua_llm/README.md).
 - **Mọi dữ liệu trong repo là dữ liệu kiểm thử tự tạo.** Không có dữ liệu bệnh nhân thật.
 
 ## Cấu trúc repo
@@ -41,7 +41,7 @@ pediatric-gastro-ai-assistant/
 │       ├── bitss.py         # Nguồn chuẩn về thang BITSS và dấu hiệu nguy hiểm
 │       ├── chat_history.py  # Lịch sử hội thoại, thời hạn lưu 90 ngày
 │       ├── dong_y.py, dong_y_nghien_cuu.py  # Hai loại đồng thuận
-│       ├── lam_sach_anh.py  # Xoá EXIF/GPS trước khi ảnh chạm đĩa
+│       ├── lam_sach_anh.py  # Xoá siêu dữ liệu (EXIF/GPS, ghi chú JPEG...) trước khi ảnh chạm đĩa
 │       ├── uncertainty.py   # Gắn cờ ca mô hình không chắc chắn (ngưỡng 0,70)
 │       ├── xuat_du_lieu.py  # Chọn ca đủ điều kiện xuất, mã ẩn danh HMAC
 │       └── ...              # rate_limit, records_query, security, token_store, yeu_to_lam_sang
@@ -55,7 +55,7 @@ pediatric-gastro-ai-assistant/
 │   ├── eval_agent.py        # 8 kịch bản trên Gemini thật (tốn hạn mức)
 │   ├── danh_gia_luoi_canh_bao.py    # Lưới cảnh báo trên 67 câu có nhãn, so với 2 chiến lược khác
 │   ├── phan_tich_co_so_toan.py      # Số liệu phần cơ sở toán học: Wilson, bootstrap, McNemar, Bảng 2.2...
-│   └── kiem_thu_dot_bien.py         # Kiểm thử đột biến: 25 lỗi cố ý chèn vào bản sao của mã
+│   └── kiem_thu_dot_bien.py         # Kiểm thử đột biến: 26 lỗi cố ý chèn vào bản sao của mã
 ├── outputs/
 │   ├── ket_qua_luoi_canh_bao.json   # Kết quả đánh giá lưới cảnh báo (tất định)
 │   ├── ket_qua_co_so_toan.json      # Kết quả phan_tich_co_so_toan.py (tất định)
@@ -162,6 +162,13 @@ uv run python danh_gia/eval_agent.py --model gemini-3.6-flash --ghi-ket-qua outp
 ```
 
 Mỗi tệp kết quả JSON ghi kèm model, thời điểm chạy, mã băm SHA-256 của hướng dẫn hệ thống và commit mã nguồn lúc chạy. Chỉ các lượt đo ngày 24/09 ghi commit của kho phát triển (lưu trữ riêng, không có trong lịch sử repo này); từ ngày 25/09, commit ghi trong kết quả đều có trong lịch sử `main`. Đợt đo 3 lượt × 4 mô hình được chạy qua nhiều ngày vì hạn mức; cách đọc các tệp, tiến độ và cách tổng hợp nằm trong [`outputs/ket_qua_llm/README.md`](outputs/ket_qua_llm/README.md).
+
+## Hạn chế đã biết
+
+- Endpoint đăng ký trả 409 cho email đã có tài khoản và 201 cho email mới, nên dò được một email đã đăng ký hay chưa; hạn mức 5 lần/10 phút/IP chỉ làm chậm việc dò. Chưa có xác minh email, đổi/quên mật khẩu và xoá tài khoản.
+- Tên bé là trường văn bản tự do duy nhất của hồ sơ còn đi tới mô hình (tối đa 100 ký tự), nên vẫn là một kênh chèn chỉ thị gián tiếp. Ghi chú y tế và chế độ ăn đã là từ vựng có kiểm soát.
+- Lớp cảnh báo dấu hiệu nguy hiểm khớp theo chuỗi: không hiểu phủ định, thành ngữ hay điều kiện tuổi. Danh sách dấu hiệu và ngưỡng độ tự tin 0,70 chưa được bác sĩ thẩm định.
+- Gói Gemini miễn phí chỉ phục vụ được vài lượt chat mỗi ngày và không phù hợp với dữ liệu y tế thật; hạn mức gọi API chỉ lưu trong bộ nhớ của từng tiến trình.
 
 ## Khai báo sử dụng AI
 

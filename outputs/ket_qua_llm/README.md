@@ -19,6 +19,8 @@ Một kịch bản có trường `"loi": "HetHanMucNgay: 429 ..."` nghĩa là m�
 
 Mọi tệp đều ghi `sha256_huong_dan_he_thong = 6231314a…`, nghĩa là hướng dẫn hệ thống (prompt) không đổi trong suốt đợt đo.
 
+Mã được đo là mã trước các bản sửa ngày 05/10/2026 (commit `cd57981`, `aa64c6b`) và 08/10/2026 (`6d07d52`); đợt đo chưa được chạy lại sau đó. Các bản sửa này không đổi prompt, bộ công cụ, dữ liệu mẫu hay luật chấm. Chúng chỉ chạm tới đường xử lý tin nhắn ở chỗ chuẩn hoá NFC (cả 8 câu hỏi đều không dấu nên không đổi kết quả khớp), kèm cảnh báo vào thông báo khi Gemini lỗi (chỉ xảy ra ở lần không đo được) và kiểm tra tham số trước khi gọi công cụ (chỉ đổi hành vi khi chính công cụ có lỗi lập trình).
+
 Trường `git_commit` nhận các giá trị khác nhau nhưng mã được đo không đổi:
 
 | `git_commit` | Ngày | Ghi chú |
