@@ -538,6 +538,17 @@ def get_record_image(record_id: int, principal: CurrentUser = Depends(get_curren
         assert_can_view_record(db, record, principal)
         duong_dan = record.image_path
 
+    return _phuc_vu_anh(record_id, duong_dan)
+
+
+def _phuc_vu_anh(record_id: int, duong_dan: str) -> Response:
+    """Đọc ảnh của một ca từ đĩa và trả về, sau khi đã kiểm quyền ở nơi gọi.
+
+    Dùng chung cho bác sĩ/phụ huynh (get_record_image) và worker suy luận
+    (worker_lay_anh): hai đường có hai cách kiểm quyền khác nhau, nhưng phần đọc file
+    phải giống hệt nhau, nhất là ba chốt chặn bên dưới (đường dẫn nằm trong thư mục
+    upload, đúng kiểu ảnh, không còn siêu dữ liệu).
+    """
     # Chỉ phục vụ file nằm TRONG thư mục upload. image_path do chính hệ thống sinh từ uuid,
     # nhưng nó nằm trong database — một dòng bị sửa tay, hay một bản khôi phục lỗi, không
     # được phép biến endpoint này thành công cụ đọc file bất kỳ trên máy chủ.
@@ -589,6 +600,60 @@ def get_record_image(record_id: int, principal: CurrentUser = Depends(get_curren
             "Content-Disposition": f'inline; filename="ca_{record_id}.{duoi}"',
         },
     )
+
+
+# Hai endpoint dưới đây hoàn tất hợp đồng với worker suy luận. Bốn endpoint inference-*
+# chỉ cho worker GHI trạng thái; trước khi có chúng, worker không có đường nào hợp lệ để
+# biết ca nào đang chờ, cũng không đọc được ảnh (token dịch vụ không phải token người
+# dùng, nên GET /{record_id}/anh trả 401). Cả hai chỉ nhận X-Service-Token và chỉ lộ đúng
+# thứ worker cần: mã ca và ảnh, không có tên bé, tuổi hay chế độ ăn.
+SO_CA_HANG_CHO_TOI_DA = 50
+# Worker chỉ cần ảnh của ca nó sắp chạy hoặc đang chạy. Ca đã completed hay failed thì
+# không còn lý do gì để token dịch vụ đọc ảnh, nên đóng luôn đường đó.
+TRANG_THAI_WORKER_DOC_ANH = {"queued", "processing"}
+
+
+@router.get("/worker/hang-cho")
+def worker_hang_cho(
+        limit: int = Query(10, ge=1, le=SO_CA_HANG_CHO_TOI_DA),
+        _worker: str = Depends(require_service_token),
+):
+    """Danh sách ca đang chờ suy luận, cũ nhất trước, để worker lấy việc.
+
+    Ca của bé đã xoá mềm bị bỏ qua: xoá mềm phải có hiệu lực ở mọi đường đọc, kể cả đường
+    của máy. Danh sách không khoá ca nào; hai worker cùng thấy một ca thì chỉ một bên chuyển
+    được nó sang processing, bên kia nhận 409 từ inference-start và bỏ qua.
+    """
+    with SessionLocal() as db:
+        hang = (
+            db.query(StoolRecord.id, StoolRecord.created_at)
+            .join(Child, Child.id == StoolRecord.child_id)
+            .filter(StoolRecord.inference_status == "queued", Child.deleted_at.is_(None))
+            .order_by(StoolRecord.created_at, StoolRecord.id)
+            .limit(limit)
+            .all()
+        )
+    return {
+        "status": "success",
+        "data": [{"record_id": rid, "created_at": tao.isoformat() if tao else None} for rid, tao in hang],
+    }
+
+
+@router.get("/{record_id}/worker/anh")
+def worker_lay_anh(record_id: int, _worker: str = Depends(require_service_token)):
+    """Ảnh của một ca, cho worker suy luận. Chỉ mở khi ca đang queued hoặc processing."""
+    with SessionLocal() as db:
+        record = _get_record_or_404(db, record_id)
+        child = db.query(Child).filter(Child.id == record.child_id).first()
+        if child is None or da_xoa_mem(child):
+            raise HTTPException(status_code=404, detail=f"Không tìm thấy ca phân tích có ID: {record_id}")
+        if record.inference_status not in TRANG_THAI_WORKER_DOC_ANH:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Ca đang ở trạng thái '{record.inference_status}', worker không cần đọc ảnh nữa.",
+            )
+        duong_dan = record.image_path
+    return _phuc_vu_anh(record_id, duong_dan)
 
 
 # Toàn bộ state machine của inference_status nằm ở ĐÚNG MỘT CHỖ này.

@@ -16,8 +16,8 @@ Mô hình học sâu phân loại ảnh và XAI thuộc repo riêng của thành
   - chặn phán quyết phân luồng;
   - lưới cảnh báo dấu hiệu nguy hiểm;
   - chuẩn hoá về văn bản thường.
-- **Kiểm thử:** 467 kiểm tra tự động, không cần mạng hay khoá API. Chất lượng của chính bộ kiểm tra được đo bằng kiểm thử đột biến (26 đột biến, chạy lại được).
-- **Chưa nối mô hình phân loại ảnh.** Backend đã có sẵn các endpoint `inference-*` cho worker suy luận, xác thực bằng `X-Service-Token`. Khi mô hình sẵn sàng, worker chỉ cần gọi các endpoint này.
+- **Kiểm thử:** 476 kiểm tra tự động, không cần mạng hay khoá API. Chất lượng của chính bộ kiểm tra được đo bằng kiểm thử đột biến (30 đột biến, chạy lại được).
+- **Đường nối với mô hình phân loại ảnh đã có, chờ checkpoint.** Worker `scripts/worker_suy_luan.py` lấy ca đang chờ, tải ảnh, chạy mô hình và ghi kết quả qua các endpoint dành cho worker (xác thực bằng `X-Service-Token`). Mô hình của phần mô hình ảnh trả 7 xác suất Type_1..Type_7; `app/services/quy_doi_nhan.py` cộng chúng theo nhóm BITSS (BSFS 1–3, 4, 5–6, 7). Luồng đầy đủ đã được kiểm bằng mô hình giả; chạy với mô hình thật cần checkpoint huấn luyện bằng repo mô hình ảnh (chưa có).
 - **Đánh giá trên Gemini thật đã đo xong** (24/09–04/10/2026, kéo dài nhiều ngày vì hạn mức của gói miễn phí): 4 mô hình × 8 kịch bản × 3 lượt. `gemini-3.6-flash`, `gemini-3.7-flash` và `gemini-3.8-flash` đạt cả 24/24 cặp (kịch bản, lượt); `gemini-3.5-flash-lite` đạt 21/24, cả ba lần trượt đều ở phép kiểm an toàn. Mô hình mặc định vẫn là `gemini-3.6-flash`, vì hai bản mới hơn bị từ chối do quá tải ở khoảng 57% số lần gọi so với 13%. Đợt đo chạy trên mã trước các bản sửa ngày 05/10 và 08/10, chưa đo lại. Kết quả thô nằm trong `outputs/ket_qua_llm/`; quy ước tên tệp và cách tổng hợp ghi trong [`outputs/ket_qua_llm/README.md`](outputs/ket_qua_llm/README.md).
 - **Mọi dữ liệu trong repo là dữ liệu kiểm thử tự tạo.** Không có dữ liệu bệnh nhân thật.
 
@@ -43,19 +43,21 @@ pediatric-gastro-ai-assistant/
 │       ├── dong_y.py, dong_y_nghien_cuu.py  # Hai loại đồng thuận
 │       ├── lam_sach_anh.py  # Xoá siêu dữ liệu (EXIF/GPS, ghi chú JPEG...) trước khi ảnh chạm đĩa
 │       ├── uncertainty.py   # Gắn cờ ca mô hình không chắc chắn (ngưỡng 0,70)
+│       ├── quy_doi_nhan.py  # 7 xác suất Type_1..7 của mô hình ảnh -> nhóm BITSS 1-4
 │       ├── xuat_du_lieu.py  # Chọn ca đủ điều kiện xuất, mã ẩn danh HMAC
 │       └── ...              # rate_limit, records_query, security, token_store, yeu_to_lam_sang
 ├── scripts/                 # Công cụ chạy tay trên máy chủ
 │   ├── create_clinician.py  # Đường DUY NHẤT tạo tài khoản bác sĩ
 │   ├── don_du_lieu_qua_han.py       # Dọn tin nhắn quá hạn, token hết hạn (cron)
-│   └── xuat_du_lieu_huan_luyen.py   # Xuất dữ liệu huấn luyện ẩn danh cho phần mô hình
+│   ├── xuat_du_lieu_huan_luyen.py   # Xuất dữ liệu huấn luyện ẩn danh cho phần mô hình
+│   └── worker_suy_luan.py   # Worker suy luận: hàng chờ -> ảnh -> mô hình -> ghi kết quả
 ├── tests/
-│   └── verify_task.py       # 467 kiểm tra tự động (40 mục), chạy trên DB và thư mục tạm
+│   └── verify_task.py       # 476 kiểm tra tự động (41 mục), chạy trên DB và thư mục tạm
 ├── danh_gia/                # Đánh giá
 │   ├── eval_agent.py        # 8 kịch bản trên Gemini thật (tốn hạn mức)
 │   ├── danh_gia_luoi_canh_bao.py    # Lưới cảnh báo trên 67 câu có nhãn, so với 2 chiến lược khác
 │   ├── phan_tich_co_so_toan.py      # Số liệu phần cơ sở toán học: Wilson, bootstrap, McNemar, Bảng 2.2...
-│   └── kiem_thu_dot_bien.py         # Kiểm thử đột biến: 26 lỗi cố ý chèn vào bản sao của mã
+│   └── kiem_thu_dot_bien.py         # Kiểm thử đột biến: 30 lỗi cố ý chèn vào bản sao của mã
 ├── outputs/
 │   ├── ket_qua_luoi_canh_bao.json   # Kết quả đánh giá lưới cảnh báo (tất định)
 │   ├── ket_qua_co_so_toan.json      # Kết quả phan_tich_co_so_toan.py (tất định)
@@ -88,7 +90,7 @@ Sao chép `.env.example` thành `.env` rồi điền giá trị:
 |---|---|---|
 | `JWT_SECRET_KEY` | có | Khoá ký token đăng nhập, tối thiểu 32 ký tự |
 | `GEMINI_API_KEY` | không | Để trống thì trợ lý tắt (`POST /api/v1/chat` trả 503); phần còn lại vẫn chạy |
-| `INFERENCE_SERVICE_TOKEN` | không | Bí mật dùng chung với worker suy luận. Để trống thì mọi endpoint `inference-*` từ chối |
+| `INFERENCE_SERVICE_TOKEN` | không | Bí mật dùng chung với worker suy luận. Để trống thì mọi endpoint dành cho worker (`inference-*`, `worker/hang-cho`, `worker/anh`) từ chối |
 | `KHOA_MA_AN_DANH_DU_LIEU` | khi xuất dữ liệu | Khoá HMAC tạo mã bệnh nhân ẩn danh; giữ cố định suốt dự án |
 | `GEMINI_MODEL` | không | Model phục vụ người dùng; để trống thì dùng mặc định đã ghim trong mã (`gemini-3.6-flash`) |
 | `GEMINI_EVAL_MODEL` | không | Model mặc định của `danh_gia/eval_agent.py`; nên khác model phục vụ vì hạn mức tính riêng theo từng model |
@@ -121,15 +123,27 @@ uv run uvicorn main:app --reload
 
 Sau đó mở tài liệu API tương tác tại <http://127.0.0.1:8000/docs>. Nếu database chưa khớp phiên bản mã, ứng dụng từ chối khởi động và in ra đúng lệnh cần chạy.
 
+Chạy worker suy luận (ở cửa sổ khác, máy chủ đang chạy, `INFERENCE_SERVICE_TOKEN` trong `.env` đã đặt). Mô hình giả để thử luồng:
+
+```bash
+uv run python scripts/worker_suy_luan.py --mo-hinh gia --mot-lan
+```
+
+Mô hình thật của phần mô hình ảnh (cần cài PyTorch, torchvision, PyYAML, pandas theo `requirements.txt` của repo đó; worker chỉ đọc repo này, kiểm `class_names` của checkpoint là đúng Type_1..Type_7):
+
+```bash
+uv run python scripts/worker_suy_luan.py --mo-hinh tien --repo-mo-hinh <đường dẫn repo mô hình ảnh> --checkpoint <repo>/outputs/checkpoints/best.pt
+```
+
 ## Kiểm thử
 
 ```bash
 uv run python tests/verify_task.py
 ```
 
-Bộ kiểm tra tự dựng database tạm và mô hình giả. Nó không cần mạng, không cần khoá API, và không đụng vào `data/`. Kết quả mong đợi là `467/467 PASS`.
+Bộ kiểm tra tự dựng database tạm và mô hình giả. Nó không cần mạng, không cần khoá API, và không đụng vào `data/`. Kết quả mong đợi là `476/476 PASS`.
 
-Để đo chất lượng của chính bộ kiểm tra, chạy kiểm thử đột biến. Script chèn từng lỗi trong 26 lỗi nhỏ vào một bản sao của mã (repo không bị sửa) rồi xem bộ kiểm tra có bắt được không; mất vài phút. Kết quả hiện tại là 24/26; hai đột biến còn lại là đột biến tương đương (không đổi hành vi):
+Để đo chất lượng của chính bộ kiểm tra, chạy kiểm thử đột biến. Script chèn từng lỗi trong 30 lỗi nhỏ vào một bản sao của mã (repo không bị sửa) rồi xem bộ kiểm tra có bắt được không; mất vài phút. Kết quả hiện tại là 28/30; hai đột biến còn lại là đột biến tương đương (không đổi hành vi):
 
 ```bash
 uv run python danh_gia/kiem_thu_dot_bien.py
@@ -168,6 +182,7 @@ Mỗi tệp kết quả JSON ghi kèm model, thời điểm chạy, mã băm SHA
 - Endpoint đăng ký trả 409 cho email đã có tài khoản và 201 cho email mới, nên dò được một email đã đăng ký hay chưa; hạn mức 5 lần/10 phút/IP chỉ làm chậm việc dò. Chưa có xác minh email, đổi/quên mật khẩu và xoá tài khoản.
 - Tên bé là trường văn bản tự do duy nhất của hồ sơ còn đi tới mô hình (tối đa 100 ký tự), nên vẫn là một kênh chèn chỉ thị gián tiếp. Ghi chú y tế và chế độ ăn đã là từ vựng có kiểm soát.
 - Lớp cảnh báo dấu hiệu nguy hiểm khớp theo chuỗi: không hiểu phủ định, thành ngữ hay điều kiện tuổi. Danh sách dấu hiệu và ngưỡng độ tự tin 0,70 chưa được bác sĩ thẩm định.
+- Nếu worker suy luận dừng đột ngột khi đang xử lý, ca nằm lại ở `processing`: chưa có hạn giờ tự đưa về `queued`, phải gọi `inference-failed` rồi `inference-retry`.
 - Gói Gemini miễn phí chỉ phục vụ được vài lượt chat mỗi ngày và không phù hợp với dữ liệu y tế thật; hạn mức gọi API chỉ lưu trong bộ nhớ của từng tiến trình.
 
 ## Khai báo sử dụng AI

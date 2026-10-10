@@ -6752,6 +6752,191 @@ check(
 )
 
 # =====================================================================
+# 41. NOI MO HINH ANH: QUY DOI NHAN VA WORKER SUY LUAN (nhiem vu 10, 2026-10-10)
+# =====================================================================
+# Mo hinh anh tra 7 xac suat Type_1..Type_7 (nhan 0..6, thu tu 7 anh cua BITSS = BSFS 1..7);
+# backend luu nhom BITSS 1..4. quy_doi_nhan la cho DUY NHAT noi hai thang. Worker
+# (scripts/worker_suy_luan.py) chi dung cac endpoint danh cho worker, xac thuc bang token
+# dich vu. Kiem tra o day dung mo hinh gia; checkpoint that cua phan mo hinh chua co.
+print("\n--- 41. Noi mo hinh anh: quy doi nhan va worker suy luan ---")
+import importlib.util as _ilu41  # noqa: E402
+import math as _math41  # noqa: E402
+
+from app.services import quy_doi_nhan as _qd41  # noqa: E402
+
+_spec41 = _ilu41.spec_from_file_location(
+    "worker_suy_luan", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                    "scripts", "worker_suy_luan.py"))
+_wk41 = _ilu41.module_from_spec(_spec41)
+_spec41.loader.exec_module(_wk41)
+_wc41 = TestClient(app, headers=WORKER_H)      # client cua worker: chi co token dich vu
+
+# (a) Bang quy doi doc tu glossary, dung thang BITSS: BSFS 1-3 -> 1, 4 -> 2, 5-6 -> 3, 7 -> 4.
+_bang41 = [_qd41.nhom_cua_nhan_mo_hinh(i) for i in range(7)]
+_tu_choi41 = []
+for _nhan_sai in (7, -1, True, 2.0):
+    try:
+        _qd41.nhom_cua_nhan_mo_hinh(_nhan_sai)
+    except ValueError:
+        _tu_choi41.append(_nhan_sai)
+check(
+    "41a) Quy doi nhan mo hinh 0..6 -> nhom BITSS [1,1,1,2,3,3,4] (BSFS 3 la phan cung); nhan ngoai 0..6 bi tu choi",
+    _bang41 == [1, 1, 1, 2, 3, 3, 4] and len(_tu_choi41) == 4,
+    f"bang={_bang41} tu_choi={_tu_choi41}",
+)
+
+# (b) Cong xac suat theo nhom, khong lay loai cao nhat: Type_5 cao nhat (0,35) nhung nhom
+#     phan cung co 0,30 + 0,28 + 0,02 = 0,60. Hai nhom bang nhau -> nhom so nho hon.
+_kq41 = _qd41.gop_xac_suat([0.30, 0.28, 0.02, 0.05, 0.35, 0.0, 0.0])
+_hoa41 = _qd41.gop_xac_suat([0.0, 0.0, 0.0, 0.5, 0.5, 0.0, 0.0])
+check(
+    "41b) Gop xac suat theo nhom: nhom 1 voi do tin cay 0,60 (khong phai nhom 3 cua loai cao nhat); hoa -> nhom nho hon",
+    _kq41["nhom"] == 1 and _math41.isclose(_kq41["do_tin_cay"], 0.60)
+    and _math41.isclose(sum(_kq41["xac_suat_nhom"].values()), 1.0)
+    and _hoa41["nhom"] == 2 and _math41.isclose(_hoa41["do_tin_cay"], 0.5),
+    f"kq={_kq41} hoa={_hoa41}",
+)
+
+# (c) Dau ra khong phai phan phoi xac suat thi bi tu choi, khong tu chuan hoa lai.
+_sai41 = {
+    "6 gia tri": [1 / 6] * 6,
+    "am": [0.5, 0.6, -0.1, 0, 0, 0, 0],
+    "NaN": [float("nan")] + [1 / 6] * 6,
+    "tong 0,7 (logit/nham lop)": [0.1] * 7,
+}
+_lot41 = []
+for _ten, _vt in _sai41.items():
+    try:
+        _qd41.gop_xac_suat(_vt)
+        _lot41.append(_ten)
+    except ValueError:
+        pass
+check(
+    "41c) Vecto sai do dai, co so am, NaN, hoac tong khac 1 deu bi tu choi",
+    _lot41 == [],
+    f"lot qua: {_lot41}",
+)
+
+# (d) Hang cho cua worker: chi token dich vu; chi ca queued, cu nhat truoc; bo ca cua be da xoa mem.
+_ca41_cho = new_queued_record()
+_ca41_xong = new_queued_record()
+client.post(f"/api/v1/records/{_ca41_xong}/inference-start", headers=WORKER_H)
+send_result(_ca41_xong, 2, 0.9)
+_be41 = client.post("/api/v1/children", json={
+    "name": "Be Xoa Truoc Khi Suy Luan", "date_of_birth": "2026-05-01", "feeding_type": "Bu me hoan toan",
+}, headers=PARENT_H)
+_be41_id = _be41.json()["data"]["child_id"] if _be41.status_code == 201 else -1
+_ca41_xoa = client.post("/api/v1/records/upload", files={"file": ("x.jpg", VALID_JPEG, "image/jpeg")},
+                        headers=PARENT_H, data={"child_id": str(_be41_id)})
+_ca41_xoa_id = _ca41_xoa.json()["data"]["record_id"] if _ca41_xoa.status_code == 201 else -1
+client.delete(f"/api/v1/children/{_be41_id}", headers=PARENT_H)
+_hc41_khong = client.get("/api/v1/records/worker/hang-cho")
+_hc41_ph = client.get("/api/v1/records/worker/hang-cho", headers=PARENT_H)
+_hc41 = _wc41.get("/api/v1/records/worker/hang-cho", params={"limit": 50})
+_ds41 = [c["record_id"] for c in _hc41.json().get("data", [])] if _hc41.status_code == 200 else []
+# Ky vong tinh doc lap tu database: ca queued cua be chua xoa, cu nhat truoc, toi da 50.
+with SessionLocal() as _db41:
+    _cho41 = (_db41.query(StoolRecord).join(Child, Child.id == StoolRecord.child_id)
+              .filter(StoolRecord.inference_status == "queued").order_by(StoolRecord.created_at, StoolRecord.id).all())
+    _ky_vong41 = [r.id for r in _cho41 if r.child_id != _be41_id and _db41.get(Child, r.child_id).deleted_at is None][:50]
+    _ca41_xoa_queued = _db41.get(StoolRecord, _ca41_xoa_id).inference_status == "queued" if _ca41_xoa_id > 0 else False
+check(
+    "41d) GET /records/worker/hang-cho: 401 khi khong co token dich vu (ke ca token phu huynh); "
+    "dung danh sach ca queued cua be chua xoa, cu nhat truoc; chi lo record_id va created_at",
+    _hc41_khong.status_code == 401 and _hc41_ph.status_code == 401 and _hc41.status_code == 200
+    and _ds41 == _ky_vong41 and _ca41_xoa_queued and _ca41_xoa_id not in _ds41 and _ca41_xong not in _ds41
+    and all(set(c) == {"record_id", "created_at"} for c in _hc41.json()["data"]),
+    f"khong={_hc41_khong.status_code} ph={_hc41_ph.status_code} hc={_hc41.status_code} "
+    f"ds={_ds41[:6]} ky_vong={_ky_vong41[:6]} xoa_queued={_ca41_xoa_queued}",
+)
+
+# (e) Anh cho worker: chi token dich vu; chi khi queued/processing; ca da xong -> 409; be da xoa -> 404.
+_a41_khong = client.get(f"/api/v1/records/{_ca41_cho}/worker/anh")
+_a41 = _wc41.get(f"/api/v1/records/{_ca41_cho}/worker/anh")
+_a41_xong = _wc41.get(f"/api/v1/records/{_ca41_xong}/worker/anh")
+_a41_xoa = _wc41.get(f"/api/v1/records/{_ca41_xoa_id}/worker/anh")
+_a41_ko_co = _wc41.get("/api/v1/records/999999/worker/anh")
+_a41_ph = client.get(f"/api/v1/records/{_ca41_cho}/anh", headers=WORKER_H)
+check(
+    "41e) GET /records/{id}/worker/anh: 401 khong token; 200 anh khi queued; 409 khi da completed; "
+    "404 khi be da xoa hoac ca khong co; token dich vu khong mo duoc duong anh cua nguoi dung",
+    _a41_khong.status_code == 401 and _a41.status_code == 200
+    and _a41.headers.get("content-type") == "image/jpeg" and len(_a41.content) > 0
+    and _a41_xong.status_code == 409 and _a41_xoa.status_code == 404 and _a41_ko_co.status_code == 404
+    and _a41_ph.status_code == 401,
+    f"khong={_a41_khong.status_code} anh={_a41.status_code} xong={_a41_xong.status_code} "
+    f"xoa={_a41_xoa.status_code} ko_co={_a41_ko_co.status_code} ph={_a41_ph.status_code}",
+)
+
+# (f) Tron luong: phu huynh tai anh -> worker (mo hinh gia, chu yeu Type_4) -> completed nhom 2,
+#     do tin cay 0,80, khong gan co -> bac si chot nhan.
+_kq41f = _wk41.xu_ly_mot_ca(_wc41, _ca41_cho, _wk41.BoPhanLoaiGia())
+with SessionLocal() as _db41:
+    _r41f = _db41.query(StoolRecord).filter(StoolRecord.id == _ca41_cho).first()
+    _sau41f = (_r41f.inference_status, _r41f.ai_predicted_class, round(_r41f.ai_confidence, 6),
+               _r41f.is_uncertain, _r41f.review_status)
+_duyet41 = send_review(_ca41_cho, decision="approved", confirmed_bitss=2)
+check(
+    "41f) Tron luong tai anh -> worker -> completed (nhom 2, 0,80, khong gan co) -> bac si chot nhan",
+    _kq41f == "xong" and _sau41f == ("completed", 2, 0.8, False, uncertainty.review_status_for(False))
+    and _duyet41.status_code == 200,
+    f"kq={_kq41f} sau={_sau41f} duyet={_duyet41.status_code} {_duyet41.text[:150]}",
+)
+
+# (g) Mo hinh phan van: nhom thang chi 0,55 (duoi nguong) -> backend tu gan co, bac si uu tien xem.
+_ca41g = new_queued_record()
+_kq41g = _wk41.xu_ly_mot_ca(_wc41, _ca41g, _wk41.BoPhanLoaiGia([0.0, 0.0, 0.0, 0.45, 0.30, 0.25, 0.0]))
+with SessionLocal() as _db41:
+    _r41g = _db41.query(StoolRecord).filter(StoolRecord.id == _ca41g).first()
+    _sau41g = (_r41g.ai_predicted_class, round(_r41g.ai_confidence, 6), _r41g.is_uncertain, _r41g.review_status)
+check(
+    "41g) Xac suat nhom thang 0,55 < nguong -> completed nhom 3, gan co khong chac chan",
+    _kq41g == "xong" and _sau41g == (3, 0.55, True, uncertainty.review_status_for(True)),
+    f"kq={_kq41g} sau={_sau41g}",
+)
+
+
+# (h) Mo hinh loi hoac tra dau ra sai -> inference-failed co ly do (ca khong ket o processing);
+#     worker thu hai gap ca da duoc nhan -> bo qua (409), khong ghi gi.
+class _MoHinhHong41:
+    def du_doan(self, anh):
+        raise RuntimeError("CUDA out of memory (gia lap)")
+
+
+_ca41h1 = new_queued_record()
+_ca41h2 = new_queued_record()
+_kq41h1 = _wk41.xu_ly_mot_ca(_wc41, _ca41h1, _MoHinhHong41())
+_kq41h2 = _wk41.xu_ly_mot_ca(_wc41, _ca41h2, _wk41.BoPhanLoaiGia([0.1] * 7))
+_kq41h3 = _wk41.xu_ly_mot_ca(_wc41, _ca41h1, _wk41.BoPhanLoaiGia())
+with SessionLocal() as _db41:
+    _loi41 = {r.id: (r.inference_status, r.inference_error or "") for r in
+              _db41.query(StoolRecord).filter(StoolRecord.id.in_([_ca41h1, _ca41h2])).all()}
+check(
+    "41h) Mo hinh nem loi / tra tong xac suat 0,7 -> failed kem ly do; worker khac gap ca da nhan -> bo qua",
+    _kq41h1 == "that_bai" and _kq41h2 == "that_bai" and _kq41h3 == "bo_qua"
+    and _loi41[_ca41h1][0] == "failed" and "CUDA out of memory" in _loi41[_ca41h1][1]
+    and _loi41[_ca41h2][0] == "failed" and "Tổng xác suất" in _loi41[_ca41h2][1],
+    f"kq={(_kq41h1, _kq41h2, _kq41h3)} loi={_loi41}",
+)
+
+# (i) Mot vong cua worker: lay dung so_ca ca dau hang cho va dua tung ca ra khoi queued
+#     (completed neu doc duoc anh; failed kem ly do neu khong, vi nhieu ca cua cac muc truoc
+#     duoc chen thang vao database ma khong co tep anh).
+_dau41 = [c["record_id"] for c in _wc41.get("/api/v1/records/worker/hang-cho", params={"limit": 5}).json()["data"]]
+_kq41i = _wk41.chay_mot_vong(_wc41, _wk41.BoPhanLoaiGia(), so_ca=5)
+with SessionLocal() as _db41:
+    _sau41i = {r.id: (r.inference_status, bool(r.inference_error)) for r in
+               _db41.query(StoolRecord).filter(StoolRecord.id.in_(_dau41 or [-1])).all()}
+check(
+    "41i) chay_mot_vong xu ly dung 5 ca dau hang cho; khong ca nao con queued hay ket processing; "
+    "ca failed deu co ly do",
+    len(_dau41) == 5 and sum(_kq41i.values()) == 5 and _kq41i["bo_qua"] == 0
+    and all(tt == "completed" or (tt == "failed" and co_ly_do) for tt, co_ly_do in _sau41i.values())
+    and _kq41i["xong"] == sum(1 for tt, _ in _sau41i.values() if tt == "completed"),
+    f"dau={_dau41} dem={_kq41i} sau={_sau41i}",
+)
+
+# =====================================================================
 print("\n--- TONG KET ---")
 failed = [r for r in results if r[1] == "FAIL"]
 for name, status, detail in results:
