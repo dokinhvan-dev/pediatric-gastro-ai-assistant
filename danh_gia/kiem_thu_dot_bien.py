@@ -7,11 +7,12 @@ sửa. Với mỗi đột biến, script chạy lại toàn bộ bộ kiểm tra
 thêm ít nhất một kiểm tra so với bản sao chưa đột biến, hoặc làm bộ kiểm tra dừng giữa chừng. Không gọi Gemini
 (bộ kiểm tra tự đặt khoá API rỗng), không đụng data/ thật.
 
-Danh sách gồm 34 đột biến: D01–D19 dựng ngày 2026-10-01, rải trên các thành phần chính, gồm bốn đột biến nhắm
+Danh sách gồm 43 đột biến: D01–D19 dựng ngày 2026-10-01, rải trên các thành phần chính, gồm bốn đột biến nhắm
 thẳng vào bất biến B1–B4; D20–D25 dựng ngày 2026-10-05, mỗi đột biến đảo ngược một bản sửa lỗi sau đợt đo;
 D26 dựng ngày 2026-10-08 cho bản sửa ghi chú JPEG còn sót sau bước làm sạch ảnh; D27–D30 dựng ngày 2026-10-10
 cho phần nối mô hình ảnh (quy đổi nhãn 7 loại sang 4 nhóm, hàng chờ và ảnh cho worker); D31–D34 dựng ngày
-2026-10-16 cho đợt tăng cường bảo mật 1 (log nhánh lỗi của chat, tắt tài liệu API, header bảo mật, timeout Gemini).
+2026-10-16 cho đợt tăng cường bảo mật 1 (log nhánh lỗi của chat, tắt tài liệu API, header bảo mật, timeout Gemini);
+D35–D43 dựng cùng ngày, mỗi đột biến gỡ một chốt phân quyền theo đối tượng mà ma trận route × vai (mục 43) phải bắt.
 D07 và D12 là đột biến tương đương (không đổi hành vi quan sát được), nên không kiểm tra chức năng nào bắt
 được chúng; chúng được giữ lại để thấy giới hạn của phương pháp.
 """
@@ -102,6 +103,26 @@ DOT_BIEN = [
      '    "Cache-Control": "no-store",\n', ""),
     ("D34 Gemini: gọi không kèm timeout", "app/services/agent_service.py",
      "config=_gan_timeout(config, han_chot)", "config=config"),
+    ("D35 đồng thuận nghiên cứu: bỏ kiểm chủ hồ sơ", "app/api/records.py",
+     "if not child or da_xoa_mem(child) or child.owner_user_id != principal.id:",
+     "if not child or da_xoa_mem(child):"),
+    ("D36 xoá hồ sơ bé: bỏ kiểm chủ hồ sơ", "app/api/children.py",
+     "if not child or child.owner_user_id != user.id or da_xoa_mem(child):", "if not child or da_xoa_mem(child):"),
+    ("D37 tải ảnh: bỏ kiểm chủ hồ sơ", "app/api/records.py",
+     "        if child.owner_user_id != principal.id:\n", "        if False:\n"),
+    ("D38 duyệt ca: không đòi vai bác sĩ", "app/api/doctor.py",
+     "Depends(require_doctor)", "Depends(get_current_user)"),
+    ("D39 danh sách duyệt của ca: bỏ kiểm quyền xem", "app/api/doctor.py",
+     '{record_id}")\n\n        assert_can_view_record(db, record, principal)\n', '{record_id}")\n\n'),
+    ("D40 ảnh của ca: bỏ kiểm quyền xem", "app/api/records.py",
+     '{record_id}")\n        assert_can_view_record(db, record, principal)\n', '{record_id}")\n'),
+    ("D41 danh sách bé: bỏ lọc theo chủ hồ sơ", "app/api/children.py",
+     ".filter(Child.owner_user_id == user.id, Child.deleted_at.is_(None))", ".filter(Child.deleted_at.is_(None))"),
+    ("D42 phạm vi danh sách ca: phụ huynh thấy bé của mọi nhà", "app/services/authz.py",
+     ".filter(Child.owner_user_id == principal.id, Child.deleted_at.is_(None))", ".filter(Child.deleted_at.is_(None))"),
+    ("D43 không được xem ca: 404 thành 403 (lộ ca có tồn tại)", "app/api/deps.py",
+     '            status_code=404,\n            detail=f"Không tìm thấy ca phân tích có ID: {record.id}",',
+     '            status_code=403,\n            detail=f"Không tìm thấy ca phân tích có ID: {record.id}",'),
 ]
 
 
