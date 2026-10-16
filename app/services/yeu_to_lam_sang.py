@@ -102,9 +102,9 @@ def chuan_hoa(danh_sach: Optional[List[str]]) -> Optional[str]:
     khai dị ứng đạm sữa bò cho con trong khi hệ thống không ghi nhận gì — một loại mất dữ
     liệu không có dấu hiệu nào để phát hiện.
 
-    Lưu dạng chuỗi ngăn cách bằng dấu phẩy chứ không phải bảng riêng: từ vựng nhỏ, cố định,
-    và không có truy vấn nào cần lọc theo yếu tố. Dựng một bảng quan hệ cho bảy giá trị là
-    trả giá phức tạp cho một nhu cầu chưa tồn tại.
+    Chuỗi trả về là giao diện ghi của Child.yeu_to_lam_sang; dữ liệu thật được tách thành từng
+    dòng của bảng child_yeu_to (thuộc tính đa trị, xem setup_database.ChildYeuTo), nơi database
+    tự kiểm lại mã thuộc từ vựng bằng CHECK.
     """
     if danh_sach is None:
         return None

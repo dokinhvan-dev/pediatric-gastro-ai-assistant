@@ -7,14 +7,15 @@ sửa. Với mỗi đột biến, script chạy lại toàn bộ bộ kiểm tra
 thêm ít nhất một kiểm tra so với bản sao chưa đột biến, hoặc làm bộ kiểm tra dừng giữa chừng. Không gọi Gemini
 (bộ kiểm tra tự đặt khoá API rỗng), không đụng data/ thật.
 
-Danh sách gồm 50 đột biến: D01–D19 dựng ngày 2026-10-01, rải trên các thành phần chính, gồm bốn đột biến nhắm
+Danh sách gồm 53 đột biến: D01–D19 dựng ngày 2026-10-01, rải trên các thành phần chính, gồm bốn đột biến nhắm
 thẳng vào bất biến B1–B4; D20–D25 dựng ngày 2026-10-05, mỗi đột biến đảo ngược một bản sửa lỗi sau đợt đo;
 D26 dựng ngày 2026-10-08 cho bản sửa ghi chú JPEG còn sót sau bước làm sạch ảnh; D27–D30 dựng ngày 2026-10-10
-cho phần nối mô hình ảnh (quy đổi nhãn 7 loại sang 4 nhóm, hàng chờ và ảnh cho worker); D31–D34 dựng ngày
-2026-10-16 cho đợt tăng cường bảo mật 1 (log nhánh lỗi của chat, tắt tài liệu API, header bảo mật, timeout Gemini);
-D35–D43 dựng cùng ngày, mỗi đột biến gỡ một chốt phân quyền theo đối tượng mà ma trận route × vai (mục 43) phải bắt;
-D44–D50 dựng cùng ngày cho nhật ký kiểm toán (mục 44): bỏ ghi ở từng loại sự kiện, bỏ trigger chỉ-ghi-thêm, trợ lý
-vẫn trả dữ liệu khi không ghi được nhật ký, không ghi IP.
+cho phần nối mô hình ảnh (quy đổi nhãn 7 loại sang 4 nhóm, hàng chờ và ảnh cho worker); D31–D33 dựng ngày
+2026-10-16 cho việc tách yếu tố lâm sàng thành bảng child_yeu_to. Nhánh security, cùng ngày: D34–D37 cho đợt
+tăng cường bảo mật 1 (log nhánh lỗi của chat, tắt tài liệu API, header bảo mật, timeout Gemini); D38–D46, mỗi
+đột biến gỡ một chốt phân quyền theo đối tượng mà ma trận route × vai (mục 44) phải bắt; D47–D53 cho nhật ký
+kiểm toán (mục 45): bỏ ghi ở từng loại sự kiện, bỏ trigger chỉ-ghi-thêm, trợ lý vẫn trả dữ liệu khi không ghi
+được nhật ký, không ghi IP.
 D07 và D12 là đột biến tương đương (không đổi hành vi quan sát được), nên không kiểm tra chức năng nào bắt
 được chúng; chúng được giữ lại để thấy giới hạn của phương pháp.
 """
@@ -96,52 +97,59 @@ DOT_BIEN = [
      '.filter(StoolRecord.inference_status == "queued")'),
     ("D30 ảnh cho worker: bỏ giới hạn trạng thái queued/processing", "app/api/records.py",
      "        if record.inference_status not in TRANG_THAI_WORKER_DOC_ANH:\n", "        if False:\n"),
-    ("D31 chat lỗi không lường trước: hạ log exception xuống debug", "app/api/chat.py",
+    ("D31 child_yeu_to: bỏ CHECK giới hạn mã trong từ vựng", "setup_database.py",
+     '            "ma IN (" + ", ".join(f"\'{m}\'" for m in sorted(_MA_YEU_TO_HOP_LE)) + ")",\n',
+     '            "1 = 1",\n'),
+    ("D32 kiểm schema: không báo cột cũ chưa chuyển", "setup_database.py",
+     "    for bang, cot, cho_moi in COT_DA_BO:\n", "    for bang, cot, cho_moi in []:\n"),
+    ("D33 chuyển dữ liệu: không lọc mã ngoài từ vựng", "setup_database.py",
+     "                if ma not in _MA_YEU_TO_HOP_LE:\n", "                if False:\n"),
+    ("D34 chat lỗi không lường trước: hạ log exception xuống debug", "app/api/chat.py",
      'logging.getLogger("bitss.chat").exception(\n            "[%s] loi khong luong',
      'logging.getLogger("bitss.chat").debug(\n            "[%s] loi khong luong'),
-    ("D32 tài liệu API: thiếu cấu hình thì bật", "main.py",
+    ("D35 tài liệu API: thiếu cấu hình thì bật", "main.py",
      '_GIA_TRI_BAT = {"1", "true", "yes", "on"}', '_GIA_TRI_BAT = {"", "1", "true", "yes", "on"}'),
-    ("D33 header bảo mật: bỏ Cache-Control no-store cho /api/", "main.py",
+    ("D36 header bảo mật: bỏ Cache-Control no-store cho /api/", "main.py",
      '    "Cache-Control": "no-store",\n', ""),
-    ("D34 Gemini: gọi không kèm timeout", "app/services/agent_service.py",
+    ("D37 Gemini: gọi không kèm timeout", "app/services/agent_service.py",
      "config=_gan_timeout(config, han_chot)", "config=config"),
-    ("D35 đồng thuận nghiên cứu: bỏ kiểm chủ hồ sơ", "app/api/records.py",
+    ("D38 đồng thuận nghiên cứu: bỏ kiểm chủ hồ sơ", "app/api/records.py",
      "if not child or da_xoa_mem(child) or child.owner_user_id != principal.id:",
      "if not child or da_xoa_mem(child):"),
-    ("D36 xoá hồ sơ bé: bỏ kiểm chủ hồ sơ", "app/api/children.py",
+    ("D39 xoá hồ sơ bé: bỏ kiểm chủ hồ sơ", "app/api/children.py",
      "if not child or child.owner_user_id != user.id or da_xoa_mem(child):", "if not child or da_xoa_mem(child):"),
-    ("D37 tải ảnh: bỏ kiểm chủ hồ sơ", "app/api/records.py",
+    ("D40 tải ảnh: bỏ kiểm chủ hồ sơ", "app/api/records.py",
      "        if child.owner_user_id != principal.id:\n", "        if False:\n"),
-    ("D38 duyệt ca: không đòi vai bác sĩ", "app/api/doctor.py",
+    ("D41 duyệt ca: không đòi vai bác sĩ", "app/api/doctor.py",
      "Depends(require_doctor)", "Depends(get_current_user)"),
-    ("D39 danh sách duyệt của ca: bỏ kiểm quyền xem", "app/api/doctor.py",
+    ("D42 danh sách duyệt của ca: bỏ kiểm quyền xem", "app/api/doctor.py",
      '{record_id}")\n\n        assert_can_view_record(db, record, principal)\n', '{record_id}")\n\n'),
-    ("D40 ảnh của ca: bỏ kiểm quyền xem", "app/api/records.py",
+    ("D43 ảnh của ca: bỏ kiểm quyền xem", "app/api/records.py",
      '{record_id}")\n        assert_can_view_record(db, record, principal)\n', '{record_id}")\n'),
-    ("D41 danh sách bé: bỏ lọc theo chủ hồ sơ", "app/api/children.py",
+    ("D44 danh sách bé: bỏ lọc theo chủ hồ sơ", "app/api/children.py",
      ".filter(Child.owner_user_id == user.id, Child.deleted_at.is_(None))", ".filter(Child.deleted_at.is_(None))"),
-    ("D42 phạm vi danh sách ca: phụ huynh thấy bé của mọi nhà", "app/services/authz.py",
+    ("D45 phạm vi danh sách ca: phụ huynh thấy bé của mọi nhà", "app/services/authz.py",
      ".filter(Child.owner_user_id == principal.id, Child.deleted_at.is_(None))", ".filter(Child.deleted_at.is_(None))"),
-    ("D43 không được xem ca: 404 thành 403 (lộ ca có tồn tại)", "app/api/deps.py",
+    ("D46 không được xem ca: 404 thành 403 (lộ ca có tồn tại)", "app/api/deps.py",
      '            status_code=404,\n            detail=f"Không tìm thấy ca phân tích có ID: {record.id}",',
      '            status_code=403,\n            detail=f"Không tìm thấy ca phân tích có ID: {record.id}",'),
-    ("D44 nhật ký: xem ca không ghi", "app/api/records.py",
+    ("D47 nhật ký: xem ca không ghi", "app/api/records.py",
      '        kiem_toan.ghi(db, principal, kiem_toan.XEM_CA, "record", record.id)\n', ""),
-    ("D45 nhật ký: chốt nhãn không ghi", "app/api/doctor.py",
+    ("D48 nhật ký: chốt nhãn không ghi", "app/api/doctor.py",
      '            kiem_toan.ghi(db, doctor, kiem_toan.DUYET_CA, "record", record.id, chi_tiet=payload.decision)\n', ""),
-    ("D46 nhật ký: lượt bị từ chối không ghi", "app/api/deps.py",
+    ("D49 nhật ký: lượt bị từ chối không ghi", "app/api/deps.py",
      '        kiem_toan.ghi_rieng(principal, kiem_toan.TRUY_CAP_BI_TU_CHOI, "record", record.id,\n'
      '                            ket_qua=kiem_toan.BI_TU_CHOI)\n', ""),
-    ("D47 nhật ký: không tạo trigger chỉ-ghi-thêm", "setup_database.py",
+    ("D50 nhật ký: không tạo trigger chỉ-ghi-thêm", "setup_database.py",
      '    if connection.dialect.name == "sqlite":\n        for cau_lenh in TRIGGER_AUDIT_CHI_GHI_THEM:',
      '    if False:\n        for cau_lenh in TRIGGER_AUDIT_CHI_GHI_THEM:'),
-    ("D48 nhật ký: trợ lý ghi hỏng vẫn trả kết quả", "app/services/agent_service.py",
+    ("D51 nhật ký: trợ lý ghi hỏng vẫn trả kết quả", "app/services/agent_service.py",
      '        logger.exception("[%s] khong ghi duoc nhat ky kiem toan cho %s - khong tra ket qua", nhan, ten_cong_cu)\n'
      '        return {"error": f"Không thực hiện được \'{ten_cong_cu}\' lúc này."}\n', "        pass\n"),
-    ("D49 nhật ký: bước chuyển của worker không ghi", "app/api/records.py",
+    ("D52 nhật ký: bước chuyển của worker không ghi", "app/api/records.py",
      '    kiem_toan.ghi(db, kiem_toan.WORKER, _HANH_DONG_THEO_DICH[target], "record", record.id,\n'
      '                  chi_tiet=f"{da_doc}->{target}")\n', ""),
-    ("D50 nhật ký: không ghi IP", "app/services/nhat_ky_kiem_toan.py",
+    ("D53 nhật ký: không ghi IP", "app/services/nhat_ky_kiem_toan.py",
      "ip=_ip_hien_tai.get(),", "ip=None,"),
 ]
 

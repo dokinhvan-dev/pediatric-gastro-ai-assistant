@@ -4755,7 +4755,7 @@ finally:
 
 check(
     "26i) Bo sung duoc cot con thieu vao database da ton tai",
-    "children.yeu_to_lam_sang" in _da_them,
+    "children.medical_notes" in _da_them,
     f"da_them={_da_them}",
 )
 
@@ -5105,7 +5105,7 @@ finally:
 check(
     "28f) Cot NOT NULL khong tu them duoc thi bao ro 'can migration thu cong'",
     any("children.owner_user_id" in x and "thủ công" in x for x in _lech_nn)
-    and not any("children.yeu_to_lam_sang" in x for x in _lech_nn),
+    and not any("children.medical_notes" in x for x in _lech_nn),
     str([x for x in _lech_nn if "children." in x])[:250],
 )
 
@@ -6237,6 +6237,11 @@ _rl.xoa_het()
 _TMP_36 = tempfile.mkdtemp(prefix="bitss_env_")
 _DB_36 = "sqlite:///" + os.path.join(_TMP_36, "tu_dotenv.db").replace("\\", "/")
 shutil.copy(os.path.join(GOC_DU_AN, "setup_database.py"), _TMP_36)
+# setup_database lay tu vung yeu to lam sang lam CHECK cho bang child_yeu_to (tu 16/10), nen
+# chep kem dung module tu vung do (module chi dung thu vien chuan) cung cau truc package.
+os.makedirs(os.path.join(_TMP_36, "app", "services"))
+for _tep36 in ("app/__init__.py", "app/services/__init__.py", "app/services/yeu_to_lam_sang.py"):
+    shutil.copy(os.path.join(GOC_DU_AN, _tep36), os.path.join(_TMP_36, _tep36))
 with open(os.path.join(_TMP_36, ".env"), "w", encoding="utf-8") as _f36:
     _f36.write(f"DATABASE_URL={_DB_36}\n")
 _env_36 = {k: v for k, v in os.environ.items() if k != "DATABASE_URL"}
@@ -6937,11 +6942,119 @@ check(
 )
 
 # =====================================================================
-# 42. TANG CUONG BAO MAT DOT 1 (nhanh security, 2026-10-16)
+# 42. YEU TO LAM SANG LA THUOC TINH DA TRI: TACH THANH BANG RIENG (2026-10-16)
+# =====================================================================
+# Truoc 16/10 yeu to lam sang la mot cot chuoi ma ngan cach dau phay trong children (khong dat
+# dang chuan 1). Nay moi gia tri la mot dong cua child_yeu_to, khoa chinh (child_id, ma), CHECK
+# gioi han ma trong tu vung; init_db chuyen du lieu cu roi bo cot cu.
+print("\n--- 42. Yeu to lam sang: tach thuoc tinh da tri thanh bang rieng ---")
+from sqlalchemy import inspect as _insp42  # noqa: E402
+from sqlalchemy.exc import IntegrityError as _IntegrityError42  # noqa: E402
+
+from setup_database import ChildYeuTo as _ChildYeuTo42  # noqa: E402
+
+# (a) Luoc do: bang child_yeu_to co khoa chinh (child_id, ma); children khong con cot chuoi cu.
+_tt42 = _insp42(engine)
+_pk42 = _tt42.get_pk_constraint("child_yeu_to")["constrained_columns"]
+_cot42 = {c["name"] for c in _tt42.get_columns("children")}
+check(
+    "42a) Bang child_yeu_to co khoa chinh (child_id, ma); children khong con cot chuoi yeu_to_lam_sang",
+    sorted(_pk42) == ["child_id", "ma"] and "yeu_to_lam_sang" not in _cot42,
+    f"pk={_pk42} cot_children_co_cu={'yeu_to_lam_sang' in _cot42}",
+)
+
+# (b) Tao be qua API voi ma trung lap -> moi ma dung mot dong; API tra lai dung tap ma.
+_r42 = client.post("/api/v1/children", json={
+    "name": "Be Yeu To Da Tri", "date_of_birth": "2026-03-01", "feeding_type": "Bu me hoan toan",
+    "yeu_to_lam_sang": ["dang_bo_sung_sat", "sinh_non", "dang_bo_sung_sat"],
+}, headers=PARENT_H)
+_be42 = _r42.json()["data"]["child_id"] if _r42.status_code == 201 else -1
+with SessionLocal() as _db42:
+    _dong42 = sorted(m for (m,) in _db42.query(_ChildYeuTo42.ma).filter(_ChildYeuTo42.child_id == _be42).all())
+check(
+    "42b) Tao be voi ma trung lap -> moi ma dung mot dong trong child_yeu_to; API tra dung tap ma",
+    _r42.status_code == 201 and _dong42 == ["dang_bo_sung_sat", "sinh_non"]
+    and set(_r42.json()["data"]["yeu_to_lam_sang"]) == {"dang_bo_sung_sat", "sinh_non"},
+    f"status={_r42.status_code} dong={_dong42}",
+)
+
+# (c) Database tu tu choi ma ngoai tu vung, ke ca khi ghi thang khong qua tang ung dung.
+_ma_la42 = None
+with SessionLocal() as _db42:
+    _db42.add(_ChildYeuTo42(child_id=_be42, ma="tu_khai_khong_co_that"))
+    try:
+        _db42.commit()
+    except _IntegrityError42 as _loi42:
+        _db42.rollback()
+        _ma_la42 = "CHECK" if "chk_yeu_to_trong_tu_vung" in str(_loi42) or "CHECK" in str(_loi42) else str(_loi42)[:80]
+check(
+    "42c) Ghi thang ma ngoai tu vung vao child_yeu_to -> database tu choi (CHECK)",
+    _ma_la42 == "CHECK",
+    f"ket_qua={_ma_la42}",
+)
+
+# (d) Cau hoi truoc day khong viet duoc bang SQL thuan: cac be dang bo sung sat.
+with SessionLocal() as _db42:
+    _sat42 = {cid for (cid,) in _db42.query(_ChildYeuTo42.child_id)
+              .filter(_ChildYeuTo42.ma == "dang_bo_sung_sat").all()}
+check(
+    "42d) Truy van SQL thuan 'cac be dang bo sung sat' tra dung be vua tao",
+    _be42 in _sat42,
+    f"be={_be42} ket_qua={sorted(_sat42)[:6]}",
+)
+
+# (e) Database cu con cot chuoi: kiem_tra_schema bao lech; init_db chuyen ma hop le (bo ma la,
+#     bo trung), xoa cot cu; chay lai lan hai vo hai va schema khop.
+import sqlite3 as _sqlite3_42  # noqa: E402
+
+import setup_database as _sd42  # noqa: E402
+
+_db_cu42 = os.path.join(_TMP_ROOT, "db_cu_yeu_to.db")
+_engine_that42 = _sd42.engine
+_sd42.engine = _sd42.create_engine(f"sqlite:///{_db_cu42.replace(chr(92), '/')}",
+                                   connect_args={"check_same_thread": False})
+try:
+    _sd42.Base.metadata.create_all(bind=_sd42.engine)
+    _kn42 = _sqlite3_42.connect(_db_cu42)
+    _kn42.execute("ALTER TABLE children ADD COLUMN yeu_to_lam_sang VARCHAR(255)")
+    _kn42.execute("INSERT INTO users (id, email, password_hash, full_name, role, is_active, created_at) "
+                  "VALUES (1, 'a@b.c', 'x', 'A', 'parent', 1, '2026-01-01')")
+    _kn42.execute("INSERT INTO children (id, owner_user_id, name, date_of_birth, feeding_type, yeu_to_lam_sang) "
+                  "VALUES (7, 1, 'B', '2026-01-01', 'Sữa công thức', 'dang_bo_sung_sat, ma_la,sinh_non,sinh_non')")
+    _kn42.commit()
+    _kn42.close()
+    _lech_truoc42 = _sd42.kiem_tra_schema()
+    # Ma la bi bo phai duoc bao cho nguoi van hanh: INSERT OR IGNORE cua SQLite bo qua ca dong
+    # vi pham CHECK mot cach im lang, nen khong co dong canh bao nay thi du lieu mat khong dau vet.
+    import contextlib as _ctx42  # noqa: E402
+    import io as _io42  # noqa: E402
+    _in42 = _io42.StringIO()
+    with _ctx42.redirect_stdout(_in42):
+        _so_chuyen42 = _sd42._chuyen_yeu_to_sang_bang_rieng()
+    _so_lan_hai42 = _sd42._chuyen_yeu_to_sang_bang_rieng()
+    _lech_sau42 = _sd42.kiem_tra_schema()
+    _kn42 = _sqlite3_42.connect(_db_cu42)
+    _dong_moi42 = sorted(r[0] for r in _kn42.execute("SELECT ma FROM child_yeu_to WHERE child_id = 7"))
+    _cot_con42 = [r[1] for r in _kn42.execute("PRAGMA table_info(children)")]
+    _kn42.close()
+finally:
+    _sd42.engine = _engine_that42
+check(
+    "42e) DB cu: kiem_tra_schema bao cot cu chua chuyen; chuyen dung 2 ma hop le, bao ma la bi bo, "
+    "bo cot cu; chay lai vo hai, schema khop",
+    any("children.yeu_to_lam_sang" in x and "child_yeu_to" in x for x in _lech_truoc42)
+    and "'ma_la'" in _in42.getvalue()
+    and _so_chuyen42 == 2 and _so_lan_hai42 == 0 and _lech_sau42 == []
+    and _dong_moi42 == ["dang_bo_sung_sat", "sinh_non"] and "yeu_to_lam_sang" not in _cot_con42,
+    f"truoc={_lech_truoc42} chuyen={_so_chuyen42} lan_hai={_so_lan_hai42} sau={_lech_sau42} dong={_dong_moi42}",
+)
+
+# =====================================================================
+# 43. TANG CUONG BAO MAT DOT 1 (nhanh security, 2026-10-16)
 # =====================================================================
 # Bon ban sua nho: nhanh loi chung cua /chat phai de lai dau vet o log; tai lieu API tat
 # theo mac dinh; header bao mat tren moi response; timeout cho tung loi goi Gemini.
-print("\n--- 42. Tang cuong bao mat dot 1 ---")
+print("\n--- 43. Tang cuong bao mat dot 1 ---")
 
 
 # (a) Nhanh except Exception cua /chat: ghi traceback va danh tinh dang ma, KHONG ghi noi
@@ -6955,140 +7068,140 @@ class _BatLogDayDu(_logging.Handler):
         self.ban_ghi.append(record)
 
 
-_bat42 = _BatLogDayDu()
-_log_chat42 = _logging.getLogger("bitss.chat")
-_log_chat42.addHandler(_bat42)
-_tin42 = "Be Tran Thi Mau 2 tuoi di ngoai ra mau tu sang"
+_bat43 = _BatLogDayDu()
+_log_chat43 = _logging.getLogger("bitss.chat")
+_log_chat43.addHandler(_bat43)
+_tin43 = "Be Tran Thi Mau 2 tuoi di ngoai ra mau tu sang"
 
 
-def _run_hong42(message, principal=None, lich_su=None):
+def _run_hong43(message, principal=None, lich_su=None):
     raise ValueError("loi lap trinh 42")
 
 
-_chat_mod.run_agent_chat_chi_tiet = _run_hong42
+_chat_mod.run_agent_chat_chi_tiet = _run_hong43
 try:
-    _r42a = client.post("/api/v1/chat", json={"message": _tin42}, headers=PARENT_H)
+    _r43a = client.post("/api/v1/chat", json={"message": _tin43}, headers=PARENT_H)
 finally:
     _chat_mod.run_agent_chat_chi_tiet = _luu_run
-    _log_chat42.removeHandler(_bat42)
-_loi42a = [r for r in _bat42.ban_ghi if r.levelname == "ERROR"]
-_chu42a = " ".join(r.getMessage() for r in _bat42.ban_ghi)
+    _log_chat43.removeHandler(_bat43)
+_loi43a = [r for r in _bat43.ban_ghi if r.levelname == "ERROR"]
+_chu43a = " ".join(r.getMessage() for r in _bat43.ban_ghi)
 check(
-    "42a) /chat loi khong luong truoc -> 500, log ERROR kem traceback va danh tinh dang ma, "
+    "43a) /chat loi khong luong truoc -> 500, log ERROR kem traceback va danh tinh dang ma, "
     "khong chua noi dung tin nhan",
-    _r42a.status_code == 500 and len(_loi42a) == 1
-    and _loi42a[0].exc_info is not None and _loi42a[0].exc_info[0] is ValueError
-    and f"user#{FIXTURE_PARENT_ID}/" in _chu42a
-    and "Tran Thi Mau" not in _chu42a and "ra mau" not in _chu42a
-    and "loi lap trinh 42" not in _r42a.text,
-    f"status={_r42a.status_code} so_dong_error={len(_loi42a)} log={_chu42a[:160]!r}",
+    _r43a.status_code == 500 and len(_loi43a) == 1
+    and _loi43a[0].exc_info is not None and _loi43a[0].exc_info[0] is ValueError
+    and f"user#{FIXTURE_PARENT_ID}/" in _chu43a
+    and "Tran Thi Mau" not in _chu43a and "ra mau" not in _chu43a
+    and "loi lap trinh 42" not in _r43a.text,
+    f"status={_r43a.status_code} so_dong_error={len(_loi43a)} log={_chu43a[:160]!r}",
 )
 
 # (b) Tai lieu API tat theo mac dinh: bo kiem tra chay khong dat BAT_TAI_LIEU_API.
-_ma42b = {u: client.get(u).status_code for u in ("/docs", "/redoc", "/openapi.json")}
+_ma43b = {u: client.get(u).status_code for u in ("/docs", "/redoc", "/openapi.json")}
 check(
-    "42b) Khong cau hinh BAT_TAI_LIEU_API -> /docs, /redoc, /openapi.json deu 404",
-    _ma42b == {"/docs": 404, "/redoc": 404, "/openapi.json": 404},
-    f"{_ma42b}",
+    "43b) Khong cau hinh BAT_TAI_LIEU_API -> /docs, /redoc, /openapi.json deu 404",
+    _ma43b == {"/docs": 404, "/redoc": 404, "/openapi.json": 404},
+    f"{_ma43b}",
 )
 
 # (c) Bat duoc khi can, gia tri la lam no luc khoi dong thay vi lang le tat.
-_bat42c = _main.cau_hinh_tai_lieu_api(" True ")
-_tat42c = [_main.cau_hinh_tai_lieu_api(v) for v in ("", "0", "off")]
+_bat43c = _main.cau_hinh_tai_lieu_api(" True ")
+_tat43c = [_main.cau_hinh_tai_lieu_api(v) for v in ("", "0", "off")]
 try:
     _main.cau_hinh_tai_lieu_api("bat")
-    _no42c = False
+    _no43c = False
 except _main.CauHinhTaiLieuKhongHopLe:
-    _no42c = True
+    _no43c = True
 check(
-    "42c) BAT_TAI_LIEU_API=true bat ca ba duong dan; rong/0/off tat; gia tri la -> tu choi khoi dong",
-    _bat42c == {"docs_url": "/docs", "redoc_url": "/redoc", "openapi_url": "/openapi.json"}
-    and all(c == {"docs_url": None, "redoc_url": None, "openapi_url": None} for c in _tat42c)
-    and _no42c,
-    f"bat={_bat42c} tat={_tat42c} no={_no42c}",
+    "43c) BAT_TAI_LIEU_API=true bat ca ba duong dan; rong/0/off tat; gia tri la -> tu choi khoi dong",
+    _bat43c == {"docs_url": "/docs", "redoc_url": "/redoc", "openapi_url": "/openapi.json"}
+    and all(c == {"docs_url": None, "redoc_url": None, "openapi_url": None} for c in _tat43c)
+    and _no43c,
+    f"bat={_bat43c} tat={_tat43c} no={_no43c}",
 )
 
 # (d) Header bao mat: moi response co nosniff/DENY/no-referrer; rieng /api/ them no-store va
 #     CSP, ca khi tra loi 401; endpoint da tu dat Cache-Control (anh) thi giu nguyen.
-_r42me = client.get("/api/v1/auth/me", headers=PARENT_H)
-_r42an = client.get("/api/v1/records")
-_r42goc = client.get("/")
-_r42anh = client.get(f"/api/v1/records/{_RID_30}/anh", headers=PARENT_H)
+_r43me = client.get("/api/v1/auth/me", headers=PARENT_H)
+_r43an = client.get("/api/v1/records")
+_r43goc = client.get("/")
+_r43anh = client.get(f"/api/v1/records/{_RID_30}/anh", headers=PARENT_H)
 
 
-def _co_header_chung42(r):
+def _co_header_chung43(r):
     return (r.headers.get("X-Content-Type-Options") == "nosniff"
             and r.headers.get("X-Frame-Options") == "DENY"
             and r.headers.get("Referrer-Policy") == "no-referrer")
 
 
-def _co_header_api42(r):
+def _co_header_api43(r):
     return (r.headers.get("Cache-Control") == "no-store"
             and r.headers.get("Content-Security-Policy") == "default-src 'none'; frame-ancestors 'none'")
 
 
 check(
-    "42d) Header bao mat: /api/ (200 va 401) co no-store + CSP + nosniff; '/' co nosniff nhung "
+    "43d) Header bao mat: /api/ (200 va 401) co no-store + CSP + nosniff; '/' co nosniff nhung "
     "khong bi ep no-store; anh giu 'private, no-store' cua endpoint",
-    _r42me.status_code == 200 and _co_header_chung42(_r42me) and _co_header_api42(_r42me)
-    and _r42an.status_code == 401 and _co_header_chung42(_r42an) and _co_header_api42(_r42an)
-    and _co_header_chung42(_r42goc) and "Cache-Control" not in _r42goc.headers
-    and _r42anh.status_code == 200 and _r42anh.headers.get("Cache-Control") == "private, no-store",
-    f"me={dict(_r42me.headers)} anon={_r42an.status_code} goc={dict(_r42goc.headers)} "
-    f"anh={_r42anh.status_code}/{_r42anh.headers.get('Cache-Control')}",
+    _r43me.status_code == 200 and _co_header_chung43(_r43me) and _co_header_api43(_r43me)
+    and _r43an.status_code == 401 and _co_header_chung43(_r43an) and _co_header_api43(_r43an)
+    and _co_header_chung43(_r43goc) and "Cache-Control" not in _r43goc.headers
+    and _r43anh.status_code == 200 and _r43anh.headers.get("Cache-Control") == "private, no-store",
+    f"me={dict(_r43me.headers)} anon={_r43an.status_code} goc={dict(_r43goc.headers)} "
+    f"anh={_r43anh.status_code}/{_r43anh.headers.get('Cache-Control')}",
 )
 
 # (e) Moi loi goi Gemini mang timeout rieng: bang GEMINI_CALL_TIMEOUT khi han chot con du,
 #     bang phan con lai cua han chot khi it hon, khong bao gio duoi san 1 giay.
-_rep42e, _mod42e, _loi42e = chay_co_loi(P_PARENT, [_FakeResponse(text="ok 42e")])
-def _timeout42(lg):
+_rep43e, _mod43e, _loi43e = chay_co_loi(P_PARENT, [_FakeResponse(text="ok 42e")])
+def _timeout43(lg):
     ho = lg["config"].http_options
     return ho.timeout if ho else None
 
 
-_to42e = [_timeout42(lg) for lg in _mod42e.lan_goi]
-_rep42e2, _mod42e2, _ = chay_co_loi(P_PARENT, [_FakeResponse(text="ok 42e2")], ngan_sach=5)
-_to42e2 = _timeout42(_mod42e2.lan_goi[0])
-_rep42e3, _mod42e3, _ = chay_co_loi(P_PARENT, [_FakeResponse(text="ok 42e3")], ngan_sach=0)
-_to42e3 = _timeout42(_mod42e3.lan_goi[0])
+_to43e = [_timeout43(lg) for lg in _mod43e.lan_goi]
+_rep43e2, _mod43e2, _ = chay_co_loi(P_PARENT, [_FakeResponse(text="ok 42e2")], ngan_sach=5)
+_to43e2 = _timeout43(_mod43e2.lan_goi[0])
+_rep43e3, _mod43e3, _ = chay_co_loi(P_PARENT, [_FakeResponse(text="ok 42e3")], ngan_sach=0)
+_to43e3 = _timeout43(_mod43e3.lan_goi[0])
 check(
-    "42e) Loi goi Gemini mang timeout: 30000ms mac dinh, <= 5000ms khi han chot con 5s, "
+    "43e) Loi goi Gemini mang timeout: 30000ms mac dinh, <= 5000ms khi han chot con 5s, "
     "san 1000ms khi han chot da het",
-    _loi42e is None and _to42e == [int(agent_service.CALL_TIMEOUT_SECONDS * 1000)] and _to42e[0] == 30000
-    and _to42e2 is not None and 4000 <= _to42e2 <= 5000 and _to42e3 == 1000,
-    f"loi={_loi42e} timeout={_to42e} / {_to42e2} / {_to42e3}",
+    _loi43e is None and _to43e == [int(agent_service.CALL_TIMEOUT_SECONDS * 1000)] and _to43e[0] == 30000
+    and _to43e2 is not None and 4000 <= _to43e2 <= 5000 and _to43e3 == 1000,
+    f"loi={_loi43e} timeout={_to43e} / {_to43e2} / {_to43e3}",
 )
 
 # (f) Het gio la loi tam thoi: thu lai roi tra loi duoc; het gio mai thi thanh TroLyBanTam (503).
-_rep42f, _mod42f, _loi42f = chay_co_loi(
+_rep43f, _mod43f, _loi43f = chay_co_loi(
     P_PARENT, [_httpx.ReadTimeout("het gio 42"), _FakeResponse(text="lan hai thi duoc")]
 )
-_rep42f2, _mod42f2, _loi42f2 = chay_co_loi(P_PARENT, [_httpx.ReadTimeout("het gio")] * _SO_LAN)
+_rep43f2, _mod43f2, _loi43f2 = chay_co_loi(P_PARENT, [_httpx.ReadTimeout("het gio")] * _SO_LAN)
 check(
-    "42f) Loi goi het gio -> thu lai nhu dut mang; het gio ca _SO_LAN lan -> TroLyBanTam",
-    _loi42f is None and _rep42f == "lan hai thi duoc" and len(_mod42f.lan_goi) == 2
-    and isinstance(_loi42f2, agent_service.TroLyBanTam) and len(_mod42f2.lan_goi) == _SO_LAN,
-    f"rep={_rep42f!r} lan={len(_mod42f.lan_goi)} loi2={type(_loi42f2).__name__} lan2={len(_mod42f2.lan_goi)}",
+    "43f) Loi goi het gio -> thu lai nhu dut mang; het gio ca _SO_LAN lan -> TroLyBanTam",
+    _loi43f is None and _rep43f == "lan hai thi duoc" and len(_mod43f.lan_goi) == 2
+    and isinstance(_loi43f2, agent_service.TroLyBanTam) and len(_mod43f2.lan_goi) == _SO_LAN,
+    f"rep={_rep43f!r} lan={len(_mod43f.lan_goi)} loi2={type(_loi43f2).__name__} lan2={len(_mod43f2.lan_goi)}",
 )
 
 # =====================================================================
-# 43. MA TRAN PHAN QUYEN: MOI ROUTE x 4 VAI (BOLA, OWASP API1/API5, 2026-10-16)
+# 44. MA TRAN PHAN QUYEN: MOI ROUTE x 4 VAI (BOLA, OWASP API1/API5, 2026-10-16)
 # =====================================================================
 # Bon vai: A = phu huynh so huu ho so, B = phu huynh khac, BS = bac si, AN = an danh. Moi
 # dong cua ma tran la MOT route voi ma trang thai mong doi cho tung vai. Cac muc truoc kiem
-# phan quyen rai rac theo tinh nang; ma tran nay kiem dong deu, va (43z) bat buoc moi route
+# phan quyen rai rac theo tinh nang; ma tran nay kiem dong deu, va (44z) bat buoc moi route
 # moi them vao app phai co dong o day - quen khai bao la truot, khong lot qua am tham.
 #
 # Thu tu goi trong mot dong: vai bi tu choi truoc, vai duoc phep sau. Voi route co ghi, trang
 # thai doi tuong duoc chup truoc va sau loat bi tu choi: bi tu choi ma van ghi thi truot.
-print("\n--- 43. Ma tran phan quyen: moi route x 4 vai ---")
+print("\n--- 44. Ma tran phan quyen: moi route x 4 vai ---")
 
-from app.services import dong_y_nghien_cuu as _dynk43  # noqa: E402
+from app.services import dong_y_nghien_cuu as _dynk44  # noqa: E402
 
 _rl14.xoa_het()
 
 
-def _tao_phu_huynh43(email, ten):
+def _tao_phu_huynh44(email, ten):
     with SessionLocal() as _db:
         _u = User(email=email, password_hash=_security.hash_password("matkhau-ma-tran-43"),
                   full_name=ten, role="parent")
@@ -7097,92 +7210,92 @@ def _tao_phu_huynh43(email, ten):
         return _u.id
 
 
-def _the43(uid, vai_tro):
+def _the44(uid, vai_tro):
     """Moi lan goi la mot token moi (jti rieng): dang xuat token nay khong dung toi token khac."""
     return bearer(_security.create_user_token(uid, vai_tro))
 
 
-_ID_A43 = _tao_phu_huynh43("phuhuynh.a43@test.local", "Phu Huynh A43")
-_ID_B43 = _tao_phu_huynh43("phuhuynh.b43@test.local", "Phu Huynh B43")
-_P_A43 = _authz.CurrentUser(id=_ID_A43, email="phuhuynh.a43@test.local", full_name="Phu Huynh A43",
+_ID_A44 = _tao_phu_huynh44("phuhuynh.a44@test.local", "Phu Huynh A44")
+_ID_B44 = _tao_phu_huynh44("phuhuynh.b44@test.local", "Phu Huynh B44")
+_P_A44 = _authz.CurrentUser(id=_ID_A44, email="phuhuynh.a44@test.local", full_name="Phu Huynh A44",
                             role="parent")
-_H43 = {"A": _the43(_ID_A43, "parent"), "B": _the43(_ID_B43, "parent"), "BS": DOCTOR_H, "AN": {}}
-_TAO_THE43 = {"A": lambda: _the43(_ID_A43, "parent"), "B": lambda: _the43(_ID_B43, "parent"),
-              "BS": lambda: _the43(FIXTURE_DOCTOR_ID, "doctor"), "AN": lambda: {}}
+_H44 = {"A": _the44(_ID_A44, "parent"), "B": _the44(_ID_B44, "parent"), "BS": DOCTOR_H, "AN": {}}
+_TAO_THE44 = {"A": lambda: _the44(_ID_A44, "parent"), "B": lambda: _the44(_ID_B44, "parent"),
+              "BS": lambda: _the44(FIXTURE_DOCTOR_ID, "doctor"), "AN": lambda: {}}
 
 # Doi tuong cua A: mot be, mot ca da co ket qua AI (de bac si duyet duoc), lich su chat.
-_r43be = client.post("/api/v1/children", json={
-    "name": "Be Ma Tran A43", "date_of_birth": "2025-06-01", "feeding_type": "Bu me hoan toan",
-}, headers=_H43["A"])
-_BE43 = _r43be.json()["data"]["child_id"] if _r43be.status_code == 201 else -1
-_r43ca = client.post("/api/v1/records/upload", files={"file": ("t.jpg", VALID_JPEG, "image/jpeg")},
-                     data={"child_id": str(_BE43)}, headers=_H43["A"])
-_CA43 = _r43ca.json()["data"]["record_id"] if _r43ca.status_code == 201 else -1
-_kq43ai = send_result(_CA43, 2, 0.95)
-with SessionLocal() as _db43:
-    _ch.ghi_luot(_db43, _P_A43, "cau hoi cua A43", "cau tra loi cho A43")
-    _db43.commit()
-_KHONG_CO43 = 10 ** 9
+_r44be = client.post("/api/v1/children", json={
+    "name": "Be Ma Tran A44", "date_of_birth": "2025-06-01", "feeding_type": "Bu me hoan toan",
+}, headers=_H44["A"])
+_BE44 = _r44be.json()["data"]["child_id"] if _r44be.status_code == 201 else -1
+_r44ca = client.post("/api/v1/records/upload", files={"file": ("t.jpg", VALID_JPEG, "image/jpeg")},
+                     data={"child_id": str(_BE44)}, headers=_H44["A"])
+_CA44 = _r44ca.json()["data"]["record_id"] if _r44ca.status_code == 201 else -1
+_kq44ai = send_result(_CA44, 2, 0.95)
+with SessionLocal() as _db44:
+    _ch.ghi_luot(_db44, _P_A44, "cau hoi cua A44", "cau tra loi cho A44")
+    _db44.commit()
+_KHONG_CO44 = 10 ** 9
 check(
-    "43a) Dung du lieu cho ma tran: be + ca da co ket qua AI cua A, lich su chat cua A",
-    _BE43 > 0 and _CA43 > 0 and _kq43ai.status_code == 200,
-    f"be={_r43be.status_code} ca={_r43ca.status_code} ai={_kq43ai.status_code}",
+    "44a) Dung du lieu cho ma tran: be + ca da co ket qua AI cua A, lich su chat cua A",
+    _BE44 > 0 and _CA44 > 0 and _kq44ai.status_code == 200,
+    f"be={_r44be.status_code} ca={_r44ca.status_code} ai={_kq44ai.status_code}",
 )
 
 
-def _anh43():
-    return {"files": {"file": ("t.jpg", VALID_JPEG, "image/jpeg")}, "data": {"child_id": str(_BE43)}}
+def _anh44():
+    return {"files": {"file": ("t.jpg", VALID_JPEG, "image/jpeg")}, "data": {"child_id": str(_BE44)}}
 
 
-def _so_ca_cua_be43():
+def _so_ca_cua_be44():
     with SessionLocal() as _db:
-        return _db.query(StoolRecord).filter(StoolRecord.child_id == _BE43).count()
+        return _db.query(StoolRecord).filter(StoolRecord.child_id == _BE44).count()
 
 
-def _dong_y_ca43():
+def _dong_y_ca44():
     with SessionLocal() as _db:
-        _r = _db.query(StoolRecord).filter(StoolRecord.id == _CA43).first()
+        _r = _db.query(StoolRecord).filter(StoolRecord.id == _CA44).first()
         return (_r.nghien_cuu_dong_y_luc is not None, _r.nghien_cuu_rut_luc is not None)
 
 
-def _be_da_xoa43():
+def _be_da_xoa44():
     with SessionLocal() as _db:
-        return _db.query(Child).filter(Child.id == _BE43).first().deleted_at is not None
+        return _db.query(Child).filter(Child.id == _BE44).first().deleted_at is not None
 
 
-def _so_duyet43():
+def _so_duyet44():
     with SessionLocal() as _db:
-        return _db.query(DoctorReview).filter(DoctorReview.record_id == _CA43).count()
+        return _db.query(DoctorReview).filter(DoctorReview.record_id == _CA44).count()
 
 
-def _dong_y_cua_A43():
+def _dong_y_cua_A44():
     with SessionLocal() as _db:
-        _u = _db.query(User).filter(User.id == _ID_A43).first()
+        _u = _db.query(User).filter(User.id == _ID_A44).first()
         return (_u.dong_y_ai_phien_ban, _u.nghien_cuu_mac_dinh_phien_ban)
 
 
-def _lich_su_A43():
+def _lich_su_A44():
     with SessionLocal() as _db:
-        return len(_ch.doc_lich_su(_db, _P_A43))
+        return len(_ch.doc_lich_su(_db, _P_A44))
 
 
-_R43 = f"/api/v1/records/{_CA43}"
-_TU_CHOI_HET43 = {"A": 401, "B": 401, "BS": 401, "AN": 401}
-_MO_HET43 = {"A": 200, "B": 200, "BS": 200, "AN": 200}
-_DONG_Y_AI43 = {"phien_ban": _dong_y.PHIEN_BAN_THONG_BAO}
-_DONG_Y_NC43 = {"phien_ban": _dynk43.PHIEN_BAN_THONG_BAO}
+_R44 = f"/api/v1/records/{_CA44}"
+_TU_CHOI_HET44 = {"A": 401, "B": 401, "BS": 401, "AN": 401}
+_MO_HET44 = {"A": 200, "B": 200, "BS": 200, "AN": 200}
+_DONG_Y_AI44 = {"phien_ban": _dong_y.PHIEN_BAN_THONG_BAO}
+_DONG_Y_NC44 = {"phien_ban": _dynk44.PHIEN_BAN_THONG_BAO}
 
 # (method, khuon duong dan cua route, duong dan that, ma mong doi theo vai, tuy chon)
 #   kw:        ham tra tham so cho client.request (goi lai moi lan: tep tai len doc mot lan)
 #   bat_bien:  ham chup trang thai; phai GIU NGUYEN sau loat vai bi tu choi (hoac truoc vai 'truoc')
 #   thu_tu:    thu tu goi khi mac dinh (bi tu choi truoc) khong du, vd. route ai cung duoc goi
 #   the_moi:   moi vai dung token moi (dang xuat thu hoi token, khong duoc pha token dung chung)
-MA_TRAN43 = [
+MA_TRAN44 = [
     # --- Cong khai co chu y: danh muc va thong bao, khong cham doi tuong nao ---
-    ("GET", "/api/v1/children/che-do-an", "/api/v1/children/che-do-an", _MO_HET43, {}),
-    ("GET", "/api/v1/children/yeu-to-lam-sang", "/api/v1/children/yeu-to-lam-sang", _MO_HET43, {}),
-    ("GET", "/api/v1/chat/thong-bao-du-lieu", "/api/v1/chat/thong-bao-du-lieu", _MO_HET43, {}),
-    ("GET", "/api/v1/records/thong-bao-nghien-cuu", "/api/v1/records/thong-bao-nghien-cuu", _MO_HET43, {}),
+    ("GET", "/api/v1/children/che-do-an", "/api/v1/children/che-do-an", _MO_HET44, {}),
+    ("GET", "/api/v1/children/yeu-to-lam-sang", "/api/v1/children/yeu-to-lam-sang", _MO_HET44, {}),
+    ("GET", "/api/v1/chat/thong-bao-du-lieu", "/api/v1/chat/thong-bao-du-lieu", _MO_HET44, {}),
+    ("GET", "/api/v1/records/thong-bao-nghien-cuu", "/api/v1/records/thong-bao-nghien-cuu", _MO_HET44, {}),
     # Chat mo cho nguoi la co chu y; khoa API rong nen moi vai deu nhan 503, KHONG ai nhan 401.
     ("POST", "/api/v1/chat", "/api/v1/chat", {"A": 503, "B": 503, "BS": 503, "AN": 503},
      {"kw": lambda: {"json": {"message": "xin chao"}}}),
@@ -7192,157 +7305,157 @@ MA_TRAN43 = [
      {"the_moi": True}),
     ("PUT", "/api/v1/auth/nghien-cuu-mac-dinh", "/api/v1/auth/nghien-cuu-mac-dinh",
      {"A": 200, "B": 200, "BS": 200, "AN": 401},
-     {"kw": lambda: {"json": {"bat": True, **_DONG_Y_NC43}}, "bat_bien": _dong_y_cua_A43,
+     {"kw": lambda: {"json": {"bat": True, **_DONG_Y_NC44}}, "bat_bien": _dong_y_cua_A44,
       "thu_tu": ["AN", "B", "BS", "A"], "truoc": "A"}),
     ("POST", "/api/v1/auth/dong-y-ai", "/api/v1/auth/dong-y-ai", {"A": 200, "B": 200, "BS": 200, "AN": 401},
-     {"kw": lambda: {"json": _DONG_Y_AI43}, "bat_bien": _dong_y_cua_A43,
+     {"kw": lambda: {"json": _DONG_Y_AI44}, "bat_bien": _dong_y_cua_A44,
       "thu_tu": ["AN", "B", "BS", "A"], "truoc": "A"}),
     ("DELETE", "/api/v1/auth/dong-y-ai", "/api/v1/auth/dong-y-ai", {"A": 200, "B": 200, "BS": 200, "AN": 401},
-     {"bat_bien": _dong_y_cua_A43, "thu_tu": ["AN", "B", "BS", "A"], "truoc": "A"}),
+     {"bat_bien": _dong_y_cua_A44, "thu_tu": ["AN", "B", "BS", "A"], "truoc": "A"}),
     ("GET", "/api/v1/children", "/api/v1/children", {"A": 200, "B": 200, "BS": 200, "AN": 401}, {}),
     ("POST", "/api/v1/children", "/api/v1/children", {"A": 201, "B": 201, "BS": 201, "AN": 401},
      {"kw": lambda: {"json": {"name": "Be Phu 43", "date_of_birth": "2025-01-01",
                               "feeding_type": "Bu me hoan toan"}}}),
-    ("DELETE", "/api/v1/chat/history", "/api/v1/chat/history", _MO_HET43,
-     {"bat_bien": _lich_su_A43, "thu_tu": ["AN", "B", "BS", "A"], "truoc": "A"}),
+    ("DELETE", "/api/v1/chat/history", "/api/v1/chat/history", _MO_HET44,
+     {"bat_bien": _lich_su_A44, "thu_tu": ["AN", "B", "BS", "A"], "truoc": "A"}),
     # --- Doi tuong cua A: day la phan BOLA ---
-    ("GET", "/api/v1/records", f"/api/v1/records?child_id={_BE43}", {"A": 200, "B": 200, "BS": 200, "AN": 401}, {}),
-    ("GET", "/api/v1/records/{record_id}", _R43, {"A": 200, "B": 404, "BS": 200, "AN": 401}, {}),
-    ("GET", "/api/v1/records/{record_id}/anh", _R43 + "/anh", {"A": 200, "B": 404, "BS": 200, "AN": 401}, {}),
-    ("GET", "/api/v1/records/{record_id}/reviews", _R43 + "/reviews", {"A": 200, "B": 404, "BS": 200, "AN": 401}, {}),
-    ("POST", "/api/v1/records/{record_id}/review", _R43 + "/review", {"A": 403, "B": 403, "BS": 200, "AN": 401},
-     {"kw": lambda: {"json": {"decision": "approved", "confirmed_bitss": 2}}, "bat_bien": _so_duyet43}),
+    ("GET", "/api/v1/records", f"/api/v1/records?child_id={_BE44}", {"A": 200, "B": 200, "BS": 200, "AN": 401}, {}),
+    ("GET", "/api/v1/records/{record_id}", _R44, {"A": 200, "B": 404, "BS": 200, "AN": 401}, {}),
+    ("GET", "/api/v1/records/{record_id}/anh", _R44 + "/anh", {"A": 200, "B": 404, "BS": 200, "AN": 401}, {}),
+    ("GET", "/api/v1/records/{record_id}/reviews", _R44 + "/reviews", {"A": 200, "B": 404, "BS": 200, "AN": 401}, {}),
+    ("POST", "/api/v1/records/{record_id}/review", _R44 + "/review", {"A": 403, "B": 403, "BS": 200, "AN": 401},
+     {"kw": lambda: {"json": {"decision": "approved", "confirmed_bitss": 2}}, "bat_bien": _so_duyet44}),
     ("POST", "/api/v1/records/upload", "/api/v1/records/upload", {"A": 201, "B": 404, "BS": 404, "AN": 401},
-     {"kw": _anh43, "bat_bien": _so_ca_cua_be43}),
-    ("POST", "/api/v1/records/{record_id}/dong-y-nghien-cuu", _R43 + "/dong-y-nghien-cuu",
-     {"A": 200, "B": 404, "BS": 404, "AN": 401}, {"kw": lambda: {"json": _DONG_Y_NC43}, "bat_bien": _dong_y_ca43}),
-    ("DELETE", "/api/v1/records/{record_id}/dong-y-nghien-cuu", _R43 + "/dong-y-nghien-cuu",
-     {"A": 200, "B": 404, "BS": 404, "AN": 401}, {"bat_bien": _dong_y_ca43}),
+     {"kw": _anh44, "bat_bien": _so_ca_cua_be44}),
+    ("POST", "/api/v1/records/{record_id}/dong-y-nghien-cuu", _R44 + "/dong-y-nghien-cuu",
+     {"A": 200, "B": 404, "BS": 404, "AN": 401}, {"kw": lambda: {"json": _DONG_Y_NC44}, "bat_bien": _dong_y_ca44}),
+    ("DELETE", "/api/v1/records/{record_id}/dong-y-nghien-cuu", _R44 + "/dong-y-nghien-cuu",
+     {"A": 200, "B": 404, "BS": 404, "AN": 401}, {"bat_bien": _dong_y_ca44}),
     # --- Diem noi cua worker: chi X-Service-Token; Bearer cua bat ky ai cung la 401 ---
-    ("GET", "/api/v1/records/worker/hang-cho", "/api/v1/records/worker/hang-cho", _TU_CHOI_HET43, {}),
-    ("GET", "/api/v1/records/{record_id}/worker/anh", _R43 + "/worker/anh", _TU_CHOI_HET43, {}),
-    ("POST", "/api/v1/records/{record_id}/inference-start", _R43 + "/inference-start", _TU_CHOI_HET43, {}),
-    ("POST", "/api/v1/records/{record_id}/inference-result", _R43 + "/inference-result", _TU_CHOI_HET43,
+    ("GET", "/api/v1/records/worker/hang-cho", "/api/v1/records/worker/hang-cho", _TU_CHOI_HET44, {}),
+    ("GET", "/api/v1/records/{record_id}/worker/anh", _R44 + "/worker/anh", _TU_CHOI_HET44, {}),
+    ("POST", "/api/v1/records/{record_id}/inference-start", _R44 + "/inference-start", _TU_CHOI_HET44, {}),
+    ("POST", "/api/v1/records/{record_id}/inference-result", _R44 + "/inference-result", _TU_CHOI_HET44,
      {"kw": lambda: {"json": {"ai_predicted_class": 4, "ai_confidence": 0.99}}}),
-    ("POST", "/api/v1/records/{record_id}/inference-failed", _R43 + "/inference-failed", _TU_CHOI_HET43,
+    ("POST", "/api/v1/records/{record_id}/inference-failed", _R44 + "/inference-failed", _TU_CHOI_HET44,
      {"kw": lambda: {"json": {"error": "gia mao"}}}),
-    ("POST", "/api/v1/records/{record_id}/inference-retry", _R43 + "/inference-retry", _TU_CHOI_HET43, {}),
+    ("POST", "/api/v1/records/{record_id}/inference-retry", _R44 + "/inference-retry", _TU_CHOI_HET44, {}),
     # Xoa ho so be dat CUOI: sau dong nay moi doi tuong cua A deu vo hinh.
-    ("DELETE", "/api/v1/children/{child_id}", f"/api/v1/children/{_BE43}",
-     {"A": 200, "B": 404, "BS": 404, "AN": 401}, {"bat_bien": _be_da_xoa43}),
+    ("DELETE", "/api/v1/children/{child_id}", f"/api/v1/children/{_BE44}",
+     {"A": 200, "B": 404, "BS": 404, "AN": 401}, {"bat_bien": _be_da_xoa44}),
 ]
 # Cong khai, khong nhan doi tuong va khong nhan token: nam ngoai ma tran nhung van tinh vao do phu.
-CONG_KHAI_NGOAI_MA_TRAN43 = {("POST", "/api/v1/auth/register"), ("POST", "/api/v1/auth/login")}
+CONG_KHAI_NGOAI_MA_TRAN44 = {("POST", "/api/v1/auth/register"), ("POST", "/api/v1/auth/login")}
 
-_PHAN_HOI43 = {}
-for _m43, _khuon43, _duong43, _mong43, _tuy43 in MA_TRAN43:
-    _duoc43 = [v for v in ("AN", "B", "BS", "A") if _mong43[v] < 300]
-    _thu_tu43 = _tuy43.get("thu_tu") or [v for v in ("AN", "B", "BS", "A") if v not in _duoc43] + _duoc43
-    _moc43 = _tuy43.get("truoc") or (_duoc43[0] if _duoc43 else None)
-    _bb43 = _tuy43.get("bat_bien")
-    _dau43 = _bb43() if _bb43 else None
-    _giu43 = True
-    _thuc43 = {}
-    for _v43 in _thu_tu43:
-        if _bb43 and _v43 == _moc43:
-            _giu43 = _bb43() == _dau43
-        _kw43 = _tuy43["kw"]() if "kw" in _tuy43 else {}
-        _h43 = _TAO_THE43[_v43]() if _tuy43.get("the_moi") else _H43[_v43]
-        _r43 = client.request(_m43, _duong43, headers=_h43, **_kw43)
-        _thuc43[_v43] = _r43.status_code
-        _PHAN_HOI43[(_m43, _khuon43, _v43)] = _r43
-    if _bb43 and _moc43 is None:
-        _giu43 = _bb43() == _dau43
+_PHAN_HOI44 = {}
+for _m44, _khuon44, _duong44, _mong44, _tuy44 in MA_TRAN44:
+    _duoc44 = [v for v in ("AN", "B", "BS", "A") if _mong44[v] < 300]
+    _thu_tu44 = _tuy44.get("thu_tu") or [v for v in ("AN", "B", "BS", "A") if v not in _duoc44] + _duoc44
+    _moc44 = _tuy44.get("truoc") or (_duoc44[0] if _duoc44 else None)
+    _bb44 = _tuy44.get("bat_bien")
+    _dau44 = _bb44() if _bb44 else None
+    _giu44 = True
+    _thuc44 = {}
+    for _v44 in _thu_tu44:
+        if _bb44 and _v44 == _moc44:
+            _giu44 = _bb44() == _dau44
+        _kw44 = _tuy44["kw"]() if "kw" in _tuy44 else {}
+        _h44 = _TAO_THE44[_v44]() if _tuy44.get("the_moi") else _H44[_v44]
+        _r44 = client.request(_m44, _duong44, headers=_h44, **_kw44)
+        _thuc44[_v44] = _r44.status_code
+        _PHAN_HOI44[(_m44, _khuon44, _v44)] = _r44
+    if _bb44 and _moc44 is None:
+        _giu44 = _bb44() == _dau44
     check(
-        f"43) {_m43} {_khuon43}: " + " ".join(f"{v}={_mong43[v]}" for v in ("A", "B", "BS", "AN"))
-        + (" ; bi tu choi thi khong ghi gi" if _bb43 else ""),
-        _thuc43 == _mong43 and _giu43,
-        f"thuc={_thuc43} bat_bien_giu={_giu43}",
+        f"44) {_m44} {_khuon44}: " + " ".join(f"{v}={_mong44[v]}" for v in ("A", "B", "BS", "AN"))
+        + (" ; bi tu choi thi khong ghi gi" if _bb44 else ""),
+        _thuc44 == _mong44 and _giu44,
+        f"thuc={_thuc44} bat_bien_giu={_giu44}",
     )
 
 
-def _json43(m, khuon, vai):
+def _json44(m, khuon, vai):
     try:
-        return _PHAN_HOI43[(m, khuon, vai)].json()
+        return _PHAN_HOI44[(m, khuon, vai)].json()
     except Exception:
         return {}
 
 
 # (b) Danh sach tra 200 cho moi vai, nen phai kiem NOI DUNG: B khong thay be/ca cua A.
-_ds_be43 = {v: [c["child_id"] for c in _json43("GET", "/api/v1/children", v).get("children", [])] for v in ("A", "B", "BS")}
-_ds_ca43 = {v: [c.get("record_id") for c in _json43("GET", "/api/v1/records", v).get("data", {}).get("records", [])] for v in ("A", "B", "BS")}
-_toi43 = {v: _json43("GET", "/api/v1/auth/me", v).get("user_id") for v in ("A", "B")}
+_ds_be44 = {v: [c["child_id"] for c in _json44("GET", "/api/v1/children", v).get("children", [])] for v in ("A", "B", "BS")}
+_ds_ca44 = {v: [c.get("record_id") for c in _json44("GET", "/api/v1/records", v).get("data", {}).get("records", [])] for v in ("A", "B", "BS")}
+_toi44 = {v: _json44("GET", "/api/v1/auth/me", v).get("user_id") for v in ("A", "B")}
 check(
-    "43b) Noi dung theo pham vi token: /children cua B va BS khong co be cua A; /records?child_id=<be A> "
+    "44b) Noi dung theo pham vi token: /children cua B va BS khong co be cua A; /records?child_id=<be A> "
     "cua B rong, cua A va BS co ca; /me tra dung nguoi goi",
-    _BE43 in _ds_be43["A"] and _BE43 not in _ds_be43["B"] and _BE43 not in _ds_be43["BS"]
-    and _CA43 in _ds_ca43["A"] and _ds_ca43["B"] == [] and _CA43 in _ds_ca43["BS"]
-    and _toi43 == {"A": _ID_A43, "B": _ID_B43},
-    f"be={_ds_be43} ca={_ds_ca43} me={_toi43}",
+    _BE44 in _ds_be44["A"] and _BE44 not in _ds_be44["B"] and _BE44 not in _ds_be44["BS"]
+    and _CA44 in _ds_ca44["A"] and _ds_ca44["B"] == [] and _CA44 in _ds_ca44["BS"]
+    and _toi44 == {"A": _ID_A44, "B": _ID_B44},
+    f"be={_ds_be44} ca={_ds_ca44} me={_toi44}",
 )
 
 # (c) Khong co "may do ton tai": voi B, doi tuong co that cua A va ID khong ton tai tra ve CUNG
 #     ma va cung thong bao (sau khi thay ID). Kiem tren ban sao chua bi xoa: be moi cua A.
-_r43be2 = client.post("/api/v1/children", json={
+_r44be2 = client.post("/api/v1/children", json={
     "name": "Be Do Ton Tai 43", "date_of_birth": "2025-06-01", "feeding_type": "Bu me hoan toan",
-}, headers=_H43["A"])
-_BE43b = _r43be2.json()["data"]["child_id"] if _r43be2.status_code == 201 else -1
-_r43ca2 = client.post("/api/v1/records/upload", files={"file": ("t.jpg", VALID_JPEG, "image/jpeg")},
-                      data={"child_id": str(_BE43b)}, headers=_H43["A"])
-_CA43b = _r43ca2.json()["data"]["record_id"] if _r43ca2.status_code == 201 else -1
+}, headers=_H44["A"])
+_BE44b = _r44be2.json()["data"]["child_id"] if _r44be2.status_code == 201 else -1
+_r44ca2 = client.post("/api/v1/records/upload", files={"file": ("t.jpg", VALID_JPEG, "image/jpeg")},
+                      data={"child_id": str(_BE44b)}, headers=_H44["A"])
+_CA44b = _r44ca2.json()["data"]["record_id"] if _r44ca2.status_code == 201 else -1
 
 
-def _cap43(m, mau, that, gia, **kw):
-    r1 = client.request(m, mau.format(that), headers=_H43["B"], **kw)
-    r2 = client.request(m, mau.format(gia), headers=_H43["B"], **kw)
+def _cap44(m, mau, that, gia, **kw):
+    r1 = client.request(m, mau.format(that), headers=_H44["B"], **kw)
+    r2 = client.request(m, mau.format(gia), headers=_H44["B"], **kw)
     d1 = str(r1.json().get("detail")).replace(str(that), "<id>")
     d2 = str(r2.json().get("detail")).replace(str(gia), "<id>")
     return (r1.status_code, d1) == (r2.status_code, d2) and r1.status_code == 404, (r1.status_code, d1, r2.status_code, d2)
 
 
-_cap43kq = [
-    _cap43("GET", "/api/v1/records/{}", _CA43b, _KHONG_CO43),
-    _cap43("GET", "/api/v1/records/{}/anh", _CA43b, _KHONG_CO43),
-    _cap43("GET", "/api/v1/records/{}/reviews", _CA43b, _KHONG_CO43),
-    _cap43("POST", "/api/v1/records/{}/dong-y-nghien-cuu", _CA43b, _KHONG_CO43, json=_DONG_Y_NC43),
-    _cap43("DELETE", "/api/v1/children/{}", _BE43b, _KHONG_CO43),
+_cap44kq = [
+    _cap44("GET", "/api/v1/records/{}", _CA44b, _KHONG_CO44),
+    _cap44("GET", "/api/v1/records/{}/anh", _CA44b, _KHONG_CO44),
+    _cap44("GET", "/api/v1/records/{}/reviews", _CA44b, _KHONG_CO44),
+    _cap44("POST", "/api/v1/records/{}/dong-y-nghien-cuu", _CA44b, _KHONG_CO44, json=_DONG_Y_NC44),
+    _cap44("DELETE", "/api/v1/children/{}", _BE44b, _KHONG_CO44),
 ]
-_r43up1 = client.post("/api/v1/records/upload", files={"file": ("t.jpg", VALID_JPEG, "image/jpeg")},
-                      data={"child_id": str(_BE43b)}, headers=_H43["B"])
-_r43up2 = client.post("/api/v1/records/upload", files={"file": ("t.jpg", VALID_JPEG, "image/jpeg")},
-                      data={"child_id": str(_KHONG_CO43)}, headers=_H43["B"])
-_up43 = (_r43up1.status_code == _r43up2.status_code == 404
-         and str(_r43up1.json().get("detail")).replace(str(_BE43b), "<id>")
-         == str(_r43up2.json().get("detail")).replace(str(_KHONG_CO43), "<id>"))
+_r44up1 = client.post("/api/v1/records/upload", files={"file": ("t.jpg", VALID_JPEG, "image/jpeg")},
+                      data={"child_id": str(_BE44b)}, headers=_H44["B"])
+_r44up2 = client.post("/api/v1/records/upload", files={"file": ("t.jpg", VALID_JPEG, "image/jpeg")},
+                      data={"child_id": str(_KHONG_CO44)}, headers=_H44["B"])
+_up44 = (_r44up1.status_code == _r44up2.status_code == 404
+         and str(_r44up1.json().get("detail")).replace(str(_BE44b), "<id>")
+         == str(_r44up2.json().get("detail")).replace(str(_KHONG_CO44), "<id>"))
 check(
-    "43c) Voi B, doi tuong co that cua A va ID khong ton tai: cung 404, cung thong bao (6 route)",
-    _BE43b > 0 and _CA43b > 0 and all(ok for ok, _ in _cap43kq) and _up43,
-    f"{[c for ok, c in _cap43kq if not ok]} upload={(_r43up1.status_code, _r43up2.status_code)}",
+    "44c) Voi B, doi tuong co that cua A va ID khong ton tai: cung 404, cung thong bao (6 route)",
+    _BE44b > 0 and _CA44b > 0 and all(ok for ok, _ in _cap44kq) and _up44,
+    f"{[c for ok, c in _cap44kq if not ok]} upload={(_r44up1.status_code, _r44up2.status_code)}",
 )
 
 # (z) Do phu: moi route /api/ cua app phai co dong trong ma tran (hoac la cong khai da khai).
 #     Them endpoint moi ma quen dong nay thi truot - phan quyen cua no chua ai kiem.
 #     Lay danh sach qua app.openapi() chu khong duyet app.routes: tu FastAPI 0.141 router con
 #     nam trong lop boc _IncludedRouter (nap luoi), app.routes chi con 6 phan tu. openapi() van
-#     dung duoc khi openapi_url da tat (42b); route nao dat include_in_schema=False thi phai
+#     dung duoc khi openapi_url da tat (43b); route nao dat include_in_schema=False thi phai
 #     khai them o day bang tay.
-_route43 = {(m.upper(), duong) for duong, cac_m in app.openapi()["paths"].items() if duong.startswith("/api/")
+_route44 = {(m.upper(), duong) for duong, cac_m in app.openapi()["paths"].items() if duong.startswith("/api/")
             for m in cac_m if m in ("get", "post", "put", "patch", "delete")}
-_khai43 = {(m, k) for m, k, _, _, _ in MA_TRAN43} | CONG_KHAI_NGOAI_MA_TRAN43
+_khai44 = {(m, k) for m, k, _, _, _ in MA_TRAN44} | CONG_KHAI_NGOAI_MA_TRAN44
 check(
-    "43z) Ma tran phu DU moi route /api/ cua app, khong thua dong nao cua route da bo",
-    _route43 == _khai43 and len(MA_TRAN43) == len({(m, k) for m, k, _, _, _ in MA_TRAN43}),
-    f"thieu={sorted(_route43 - _khai43)} thua={sorted(_khai43 - _route43)}",
+    "44z) Ma tran phu DU moi route /api/ cua app, khong thua dong nao cua route da bo",
+    _route44 == _khai44 and len(MA_TRAN44) == len({(m, k) for m, k, _, _, _ in MA_TRAN44}),
+    f"thieu={sorted(_route44 - _khai44)} thua={sorted(_khai44 - _route44)}",
 )
 
 # =====================================================================
-# 44. NHAT KY KIEM TOAN (audit_log, 2026-10-16)
+# 45. NHAT KY KIEM TOAN (audit_log, 2026-10-16)
 # =====================================================================
 # Ai xem ho so/anh nao, ai chot nhan, ai dong y/rut dong y, ai bi tu choi khi thu ID cua nha
 # khac - ghi vao bang chi-ghi-them, chi ma dinh danh, khong PII. Thao tac co ghi: nhat ky cung
 # transaction. Duong doc: khong ghi duoc nhat ky thi khong tra du lieu.
-print("\n--- 44. Nhat ky kiem toan ---")
-from sqlalchemy.exc import DatabaseError as _DbErr44  # noqa: E402
+print("\n--- 45. Nhat ky kiem toan ---")
+from sqlalchemy.exc import DatabaseError as _DbErr45  # noqa: E402
 
 from setup_database import AuditLog as _AuditLog  # noqa: E402
 from app.services import nhat_ky_kiem_toan as _nk  # noqa: E402
@@ -7350,215 +7463,215 @@ from app.services import nhat_ky_kiem_toan as _nk  # noqa: E402
 _rl14.xoa_het()
 
 
-def _moc44():
+def _moc45():
     with SessionLocal() as _db:
         return _db.query(_AuditLog.id).order_by(_AuditLog.id.desc()).limit(1).scalar() or 0
 
 
-def _sau44(moc):
+def _sau45(moc):
     """Cac dong ghi sau moc, dang (nguoi, vai, hanh dong, loai, id doi tuong, ket qua, ip, chi tiet)."""
     with SessionLocal() as _db:
         return [(r.actor_user_id, r.actor_role, r.action, r.object_type, r.object_id, r.outcome, r.ip, r.detail)
                 for r in _db.query(_AuditLog).filter(_AuditLog.id > moc).order_by(_AuditLog.id).all()]
 
 
-_ID_A44 = _tao_phu_huynh43("phuhuynh.a44@test.local", "Phu Huynh A44")
-_ID_B44 = _tao_phu_huynh43("phuhuynh.b44@test.local", "Phu Huynh B44")
-_HA44, _HB44 = _the43(_ID_A44, "parent"), _the43(_ID_B44, "parent")
-_P_B44 = _authz.CurrentUser(id=_ID_B44, email="phuhuynh.b44@test.local", full_name="Phu Huynh B44", role="parent")
+_ID_A45 = _tao_phu_huynh44("phuhuynh.a45@test.local", "Phu Huynh A45")
+_ID_B45 = _tao_phu_huynh44("phuhuynh.b45@test.local", "Phu Huynh B45")
+_HA45, _HB45 = _the44(_ID_A45, "parent"), _the44(_ID_B45, "parent")
+_P_B45 = _authz.CurrentUser(id=_ID_B45, email="phuhuynh.b45@test.local", full_name="Phu Huynh B45", role="parent")
 
 # (a) Tao ho so be va tai anh: moi thao tac mot dong, cung transaction voi du lieu.
-_m = _moc44()
-_r44be = client.post("/api/v1/children", json={
+_m = _moc45()
+_r45be = client.post("/api/v1/children", json={
     "name": "Be Kiem Toan Hoa", "date_of_birth": "2025-06-01", "feeding_type": "Bu me hoan toan",
-}, headers=_HA44)
-_BE44 = _r44be.json()["data"]["child_id"] if _r44be.status_code == 201 else -1
-_r44ca = client.post("/api/v1/records/upload", files={"file": ("t.jpg", VALID_JPEG, "image/jpeg")},
-                     data={"child_id": str(_BE44)}, headers=_HA44)
-_CA44 = _r44ca.json()["data"]["record_id"] if _r44ca.status_code == 201 else -1
-_d44a = _sau44(_m)
+}, headers=_HA45)
+_BE45 = _r45be.json()["data"]["child_id"] if _r45be.status_code == 201 else -1
+_r45ca = client.post("/api/v1/records/upload", files={"file": ("t.jpg", VALID_JPEG, "image/jpeg")},
+                     data={"child_id": str(_BE45)}, headers=_HA45)
+_CA45 = _r45ca.json()["data"]["record_id"] if _r45ca.status_code == 201 else -1
+_d45a = _sau45(_m)
 check(
-    "44a) Tao ho so be / tai anh -> moi thao tac dung mot dong (nguoi lam, doi tuong, ip, thanh cong)",
-    _d44a == [
-        (_ID_A44, "parent", _nk.TAO_HO_SO_BE, "child", _BE44, "success", "testclient", None),
-        (_ID_A44, "parent", _nk.TAI_ANH_LEN, "record", _CA44, "success", "testclient", None),
+    "45a) Tao ho so be / tai anh -> moi thao tac dung mot dong (nguoi lam, doi tuong, ip, thanh cong)",
+    _d45a == [
+        (_ID_A45, "parent", _nk.TAO_HO_SO_BE, "child", _BE45, "success", "testclient", None),
+        (_ID_A45, "parent", _nk.TAI_ANH_LEN, "record", _CA45, "success", "testclient", None),
     ],
-    f"{_d44a}",
+    f"{_d45a}",
 )
 
 # (b) Worker: moi buoc chuyen trang thai mot dong, vai 'worker', khong user_id.
-_m = _moc44()
-client.post(f"/api/v1/records/{_CA44}/inference-start", headers=WORKER_H)
-send_result(_CA44, 2, 0.95)
-_d44b = _sau44(_m)
+_m = _moc45()
+client.post(f"/api/v1/records/{_CA45}/inference-start", headers=WORKER_H)
+send_result(_CA45, 2, 0.95)
+_d45b = _sau45(_m)
 check(
-    "44b) Worker bat dau / ghi ket qua -> hai dong vai worker, chi tiet la buoc chuyen trang thai",
-    _d44b == [
-        (None, "worker", _nk.WORKER_BAT_DAU, "record", _CA44, "success", "testclient", "queued->processing"),
-        (None, "worker", _nk.WORKER_GHI_KET_QUA, "record", _CA44, "success", "testclient", "processing->completed"),
+    "45b) Worker bat dau / ghi ket qua -> hai dong vai worker, chi tiet la buoc chuyen trang thai",
+    _d45b == [
+        (None, "worker", _nk.WORKER_BAT_DAU, "record", _CA45, "success", "testclient", "queued->processing"),
+        (None, "worker", _nk.WORKER_GHI_KET_QUA, "record", _CA45, "success", "testclient", "processing->completed"),
     ],
-    f"{_d44b}",
+    f"{_d45b}",
 )
 
 # (c) Duong doc: xem ca, xem anh, xem danh sach duyet - ghi ca khi nguoi xem la chu ho so.
-_m = _moc44()
-_r44xem = [client.get(f"/api/v1/records/{_CA44}{d}", headers=h).status_code
-           for d, h in (("", DOCTOR_H), ("/anh", DOCTOR_H), ("/reviews", _HA44))]
-_d44c = _sau44(_m)
+_m = _moc45()
+_r45xem = [client.get(f"/api/v1/records/{_CA45}{d}", headers=h).status_code
+           for d, h in (("", DOCTOR_H), ("/anh", DOCTOR_H), ("/reviews", _HA45))]
+_d45c = _sau45(_m)
 check(
-    "44c) Bac si xem ca va anh, phu huynh xem danh sach duyet -> ba dong dung nguoi va dung hanh dong",
-    _r44xem == [200, 200, 200] and _d44c == [
-        (FIXTURE_DOCTOR_ID, "doctor", _nk.XEM_CA, "record", _CA44, "success", "testclient", None),
-        (FIXTURE_DOCTOR_ID, "doctor", _nk.XEM_ANH, "record", _CA44, "success", "testclient", None),
-        (_ID_A44, "parent", _nk.XEM_DANH_SACH_DUYET, "record", _CA44, "success", "testclient", None),
+    "45c) Bac si xem ca va anh, phu huynh xem danh sach duyet -> ba dong dung nguoi va dung hanh dong",
+    _r45xem == [200, 200, 200] and _d45c == [
+        (FIXTURE_DOCTOR_ID, "doctor", _nk.XEM_CA, "record", _CA45, "success", "testclient", None),
+        (FIXTURE_DOCTOR_ID, "doctor", _nk.XEM_ANH, "record", _CA45, "success", "testclient", None),
+        (_ID_A45, "parent", _nk.XEM_DANH_SACH_DUYET, "record", _CA45, "success", "testclient", None),
     ],
-    f"ma={_r44xem} {_d44c}",
+    f"ma={_r45xem} {_d45c}",
 )
 
 # (d) Bi tu choi: B thu ca/be CO THAT cua A -> 404 nhu cu va mot dong 'denied'; ID khong ton
 #     tai thi khong ghi (khong co doi tuong nao bi dung toi).
-_m = _moc44()
-_r44tc = [
-    client.get(f"/api/v1/records/{_CA44}", headers=_HB44).status_code,
-    client.get(f"/api/v1/records/{_CA44}/anh", headers=_HB44).status_code,
-    client.post(f"/api/v1/records/{_CA44}/dong-y-nghien-cuu", json={"phien_ban": _dynk43.PHIEN_BAN_THONG_BAO},
-                headers=_HB44).status_code,
+_m = _moc45()
+_r45tc = [
+    client.get(f"/api/v1/records/{_CA45}", headers=_HB45).status_code,
+    client.get(f"/api/v1/records/{_CA45}/anh", headers=_HB45).status_code,
+    client.post(f"/api/v1/records/{_CA45}/dong-y-nghien-cuu", json={"phien_ban": _dynk44.PHIEN_BAN_THONG_BAO},
+                headers=_HB45).status_code,
     client.post("/api/v1/records/upload", files={"file": ("t.jpg", VALID_JPEG, "image/jpeg")},
-                data={"child_id": str(_BE44)}, headers=_HB44).status_code,
-    client.delete(f"/api/v1/children/{_BE44}", headers=_HB44).status_code,
-    client.get(f"/api/v1/records/{_KHONG_CO43}", headers=_HB44).status_code,
+                data={"child_id": str(_BE45)}, headers=_HB45).status_code,
+    client.delete(f"/api/v1/children/{_BE45}", headers=_HB45).status_code,
+    client.get(f"/api/v1/records/{_KHONG_CO44}", headers=_HB45).status_code,
 ]
-_d44d = _sau44(_m)
-_tc = (_ID_B44, "parent", _nk.TRUY_CAP_BI_TU_CHOI)
+_d45d = _sau45(_m)
+_tc = (_ID_B45, "parent", _nk.TRUY_CAP_BI_TU_CHOI)
 check(
-    "44d) B thu doi tuong co that cua A (5 lan) -> 5 dong 'denied' dung doi tuong; ID khong ton tai khong ghi",
-    _r44tc == [404] * 6 and _d44d == [
-        _tc + ("record", _CA44, "denied", "testclient", None),
-        _tc + ("record", _CA44, "denied", "testclient", None),
-        _tc + ("record", _CA44, "denied", "testclient", "dong_y_nghien_cuu"),
-        _tc + ("child", _BE44, "denied", "testclient", _nk.TAI_ANH_LEN),
-        _tc + ("child", _BE44, "denied", "testclient", _nk.XOA_HO_SO_BE),
+    "45d) B thu doi tuong co that cua A (5 lan) -> 5 dong 'denied' dung doi tuong; ID khong ton tai khong ghi",
+    _r45tc == [404] * 6 and _d45d == [
+        _tc + ("record", _CA45, "denied", "testclient", None),
+        _tc + ("record", _CA45, "denied", "testclient", None),
+        _tc + ("record", _CA45, "denied", "testclient", "dong_y_nghien_cuu"),
+        _tc + ("child", _BE45, "denied", "testclient", _nk.TAI_ANH_LEN),
+        _tc + ("child", _BE45, "denied", "testclient", _nk.XOA_HO_SO_BE),
     ],
-    f"ma={_r44tc} {_d44d}",
+    f"ma={_r45tc} {_d45d}",
 )
 
 # (e) Thao tac co ghi: bac si chot nhan, gia dinh dong y / rut dong y nghien cuu, dong y AI.
-_m = _moc44()
-_r44ghi = [
-    client.post(f"/api/v1/records/{_CA44}/review", json={"decision": "approved", "confirmed_bitss": 2},
+_m = _moc45()
+_r45ghi = [
+    client.post(f"/api/v1/records/{_CA45}/review", json={"decision": "approved", "confirmed_bitss": 2},
                 headers=DOCTOR_H).status_code,
-    client.post(f"/api/v1/records/{_CA44}/dong-y-nghien-cuu", json={"phien_ban": _dynk43.PHIEN_BAN_THONG_BAO},
-                headers=_HA44).status_code,
-    client.delete(f"/api/v1/records/{_CA44}/dong-y-nghien-cuu", headers=_HA44).status_code,
-    client.post("/api/v1/auth/dong-y-ai", json={"phien_ban": _dong_y.PHIEN_BAN_THONG_BAO}, headers=_HA44).status_code,
-    client.delete("/api/v1/auth/dong-y-ai", headers=_HA44).status_code,
+    client.post(f"/api/v1/records/{_CA45}/dong-y-nghien-cuu", json={"phien_ban": _dynk44.PHIEN_BAN_THONG_BAO},
+                headers=_HA45).status_code,
+    client.delete(f"/api/v1/records/{_CA45}/dong-y-nghien-cuu", headers=_HA45).status_code,
+    client.post("/api/v1/auth/dong-y-ai", json={"phien_ban": _dong_y.PHIEN_BAN_THONG_BAO}, headers=_HA45).status_code,
+    client.delete("/api/v1/auth/dong-y-ai", headers=_HA45).status_code,
 ]
-_d44e = [d[:6] + (d[7],) for d in _sau44(_m)]
+_d45e = [d[:6] + (d[7],) for d in _sau45(_m)]
 check(
-    "44e) Chot nhan (kem quyet dinh), dong y/rut dong y nghien cuu cua ca, dong y/rut dong y AI -> moi viec mot dong",
-    _r44ghi == [200] * 5 and _d44e == [
-        (FIXTURE_DOCTOR_ID, "doctor", _nk.DUYET_CA, "record", _CA44, "success", "approved"),
-        (_ID_A44, "parent", _nk.DONG_Y_NGHIEN_CUU_CA, "record", _CA44, "success", _dynk43.PHIEN_BAN_THONG_BAO),
-        (_ID_A44, "parent", _nk.RUT_DONG_Y_NGHIEN_CUU_CA, "record", _CA44, "success", None),
-        (_ID_A44, "parent", _nk.DONG_Y_AI, "user", _ID_A44, "success", _dong_y.PHIEN_BAN_THONG_BAO),
-        (_ID_A44, "parent", _nk.RUT_DONG_Y_AI, "user", _ID_A44, "success", None),
+    "45e) Chot nhan (kem quyet dinh), dong y/rut dong y nghien cuu cua ca, dong y/rut dong y AI -> moi viec mot dong",
+    _r45ghi == [200] * 5 and _d45e == [
+        (FIXTURE_DOCTOR_ID, "doctor", _nk.DUYET_CA, "record", _CA45, "success", "approved"),
+        (_ID_A45, "parent", _nk.DONG_Y_NGHIEN_CUU_CA, "record", _CA45, "success", _dynk44.PHIEN_BAN_THONG_BAO),
+        (_ID_A45, "parent", _nk.RUT_DONG_Y_NGHIEN_CUU_CA, "record", _CA45, "success", None),
+        (_ID_A45, "parent", _nk.DONG_Y_AI, "user", _ID_A45, "success", _dong_y.PHIEN_BAN_THONG_BAO),
+        (_ID_A45, "parent", _nk.RUT_DONG_Y_AI, "user", _ID_A45, "success", None),
     ],
-    f"ma={_r44ghi} {_d44e}",
+    f"ma={_r45ghi} {_d45e}",
 )
 
 # (f) Dang nhap: thanh cong, sai mat khau (doi tuong la tai khoan bi thu, nguoi lam la an
 #     danh), email khong ton tai (khong doi tuong). Dang xuat.
-_m = _moc44()
-_r44dn = [
-    client.post("/api/v1/auth/login", json={"email": "phuhuynh.a44@test.local", "password": "matkhau-ma-tran-43"}),
-    client.post("/api/v1/auth/login", json={"email": "phuhuynh.a44@test.local", "password": "sai-mat-khau-44"}),
+_m = _moc45()
+_r45dn = [
+    client.post("/api/v1/auth/login", json={"email": "phuhuynh.a45@test.local", "password": "matkhau-ma-tran-43"}),
+    client.post("/api/v1/auth/login", json={"email": "phuhuynh.a45@test.local", "password": "sai-mat-khau-44"}),
     client.post("/api/v1/auth/login", json={"email": "khong.ai.ca.44@test.local", "password": "sai-mat-khau-44"}),
 ]
-_r44dx = client.post("/api/v1/auth/logout", headers=bearer(_r44dn[0].json().get("access_token", "")))
-_d44f = [d[:6] for d in _sau44(_m)]
+_r45dx = client.post("/api/v1/auth/logout", headers=bearer(_r45dn[0].json().get("access_token", "")))
+_d45f = [d[:6] for d in _sau45(_m)]
 check(
-    "44f) Dang nhap dung / sai mat khau / email la va dang xuat -> dung bon dong, sai thi 'denied'",
-    [r.status_code for r in _r44dn] == [200, 401, 401] and _r44dx.status_code == 200 and _d44f == [
-        (_ID_A44, "parent", _nk.DANG_NHAP, "user", _ID_A44, "success"),
-        (None, "anon", _nk.DANG_NHAP_THAT_BAI, "user", _ID_A44, "denied"),
+    "45f) Dang nhap dung / sai mat khau / email la va dang xuat -> dung bon dong, sai thi 'denied'",
+    [r.status_code for r in _r45dn] == [200, 401, 401] and _r45dx.status_code == 200 and _d45f == [
+        (_ID_A45, "parent", _nk.DANG_NHAP, "user", _ID_A45, "success"),
+        (None, "anon", _nk.DANG_NHAP_THAT_BAI, "user", _ID_A45, "denied"),
         (None, "anon", _nk.DANG_NHAP_THAT_BAI, None, None, "denied"),
-        (_ID_A44, "parent", _nk.DANG_XUAT, "user", _ID_A44, "success"),
+        (_ID_A45, "parent", _nk.DANG_XUAT, "user", _ID_A45, "success"),
     ],
-    f"ma={[r.status_code for r in _r44dn]}/{_r44dx.status_code} {_d44f}",
+    f"ma={[r.status_code for r in _r45dn]}/{_r45dx.status_code} {_d45f}",
 )
 
 # (g) Tro ly doc ho so la mot loi xem: bac si doc ca -> 'success' kem ten cong cu; phu huynh B
 #     (da dong y AI) hoi ca cua A -> cong cu tu choi va nhat ky ghi 'denied'.
 # Gia dinh A vua rut dong y AI o (e): tro ly khong doc ca cua A cho bat ky ai, ke ca bac si.
 # Dong y lai truoc, roi moi kiem.
-client.post("/api/v1/auth/dong-y-ai", json={"phien_ban": _dong_y.PHIEN_BAN_THONG_BAO}, headers=_HA44)
-client.post("/api/v1/auth/dong-y-ai", json={"phien_ban": _dong_y.PHIEN_BAN_THONG_BAO}, headers=_HB44)
-_m = _moc44()
-_kq44g1 = agent_service._goi_cong_cu(P_DOCTOR, "tra_cuu_ket_qua_ai_phan", {"record_id": _CA44})
-_kq44g2 = agent_service._goi_cong_cu(_P_B44, "tra_cuu_ket_qua_ai_phan", {"record_id": _CA44})
-_d44g = [d[:6] + (d[7],) for d in _sau44(_m)]
+client.post("/api/v1/auth/dong-y-ai", json={"phien_ban": _dong_y.PHIEN_BAN_THONG_BAO}, headers=_HA45)
+client.post("/api/v1/auth/dong-y-ai", json={"phien_ban": _dong_y.PHIEN_BAN_THONG_BAO}, headers=_HB45)
+_m = _moc45()
+_kq45g1 = agent_service._goi_cong_cu(P_DOCTOR, "tra_cuu_ket_qua_ai_phan", {"record_id": _CA45})
+_kq45g2 = agent_service._goi_cong_cu(_P_B45, "tra_cuu_ket_qua_ai_phan", {"record_id": _CA45})
+_d45g = [d[:6] + (d[7],) for d in _sau45(_m)]
 check(
-    "44g) Tro ly doc ca: bac si -> 'success' kem ten cong cu; B hoi ca cua A -> 'denied'",
-    "error" not in _kq44g1 and "error" in _kq44g2 and _d44g == [
-        (FIXTURE_DOCTOR_ID, "doctor", _nk.TRO_LY_DOC_DU_LIEU, "record", _CA44, "success", "tra_cuu_ket_qua_ai_phan"),
-        (_ID_B44, "parent", _nk.TRO_LY_DOC_DU_LIEU, "record", _CA44, "denied", "tra_cuu_ket_qua_ai_phan"),
+    "45g) Tro ly doc ca: bac si -> 'success' kem ten cong cu; B hoi ca cua A -> 'denied'",
+    "error" not in _kq45g1 and "error" in _kq45g2 and _d45g == [
+        (FIXTURE_DOCTOR_ID, "doctor", _nk.TRO_LY_DOC_DU_LIEU, "record", _CA45, "success", "tra_cuu_ket_qua_ai_phan"),
+        (_ID_B45, "parent", _nk.TRO_LY_DOC_DU_LIEU, "record", _CA45, "denied", "tra_cuu_ket_qua_ai_phan"),
     ],
-    f"kq1_loi={'error' in _kq44g1} kq2_loi={'error' in _kq44g2} {_d44g}",
+    f"kq1_loi={'error' in _kq45g1} kq2_loi={'error' in _kq45g2} {_d45g}",
 )
 
 
 # (h) Khong ghi duoc nhat ky thi KHONG tra du lieu: ca HTTP lan tro ly.
-def _ghi_hong44(*a, **k):
+def _ghi_hong45(*a, **k):
     raise RuntimeError("database nhat ky bi khoa (gia lap)")
 
 
-_luu_ghi44, _luu_ghi_rieng44 = _nk.ghi, _nk.ghi_rieng
-_nk.ghi = _ghi_hong44
+_luu_ghi45, _luu_ghi_rieng45 = _nk.ghi, _nk.ghi_rieng
+_nk.ghi = _ghi_hong45
 try:
     try:
-        _r44h = client.get(f"/api/v1/records/{_CA44}", headers=DOCTOR_H)
-        _lo44h = _r44h.status_code == 200 or "Be Kiem Toan Hoa" in _r44h.text
+        _r45h = client.get(f"/api/v1/records/{_CA45}", headers=DOCTOR_H)
+        _lo45h = _r45h.status_code == 200 or "Be Kiem Toan Hoa" in _r45h.text
     except RuntimeError:
-        _lo44h = False          # TestClient nem lai exception cua endpoint: khong co du lieu nao ra
+        _lo45h = False          # TestClient nem lai exception cua endpoint: khong co du lieu nao ra
 finally:
-    _nk.ghi = _luu_ghi44
-_nk.ghi_rieng = _ghi_hong44
+    _nk.ghi = _luu_ghi45
+_nk.ghi_rieng = _ghi_hong45
 try:
-    _kq44h = agent_service._goi_cong_cu(P_DOCTOR, "tra_cuu_ket_qua_ai_phan", {"record_id": _CA44})
+    _kq45h = agent_service._goi_cong_cu(P_DOCTOR, "tra_cuu_ket_qua_ai_phan", {"record_id": _CA45})
 finally:
-    _nk.ghi_rieng = _luu_ghi_rieng44
+    _nk.ghi_rieng = _luu_ghi_rieng45
 check(
-    "44h) Ghi nhat ky hong -> GET ca khong tra du lieu; cong cu tro ly tra loi chung, khong tra ket qua",
-    not _lo44h and set(_kq44h) == {"error"},
-    f"lo_http={_lo44h} tro_ly={_kq44h}",
+    "45h) Ghi nhat ky hong -> GET ca khong tra du lieu; cong cu tro ly tra loi chung, khong tra ket qua",
+    not _lo45h and set(_kq45h) == {"error"},
+    f"lo_http={_lo45h} tro_ly={_kq45h}",
 )
 
 # (i) Chi ghi them: UPDATE va DELETE tren audit_log bi chinh database tu choi.
-_loi44i = []
-for _cau44 in ("UPDATE audit_log SET action = 'sua' WHERE id = (SELECT max(id) FROM audit_log)",
+_loi45i = []
+for _cau45 in ("UPDATE audit_log SET action = 'sua' WHERE id = (SELECT max(id) FROM audit_log)",
                "DELETE FROM audit_log WHERE id = (SELECT max(id) FROM audit_log)"):
-    with SessionLocal() as _db44:
+    with SessionLocal() as _db45:
         try:
-            _db44.execute(_sqltext(_cau44))
-            _db44.commit()
-            _loi44i.append(None)
-        except _DbErr44 as _e44:
-            _db44.rollback()
-            _loi44i.append("chi duoc ghi them" in str(_e44))
+            _db45.execute(_sqltext(_cau45))
+            _db45.commit()
+            _loi45i.append(None)
+        except _DbErr45 as _e45:
+            _db45.rollback()
+            _loi45i.append("chi duoc ghi them" in str(_e45))
 check(
-    "44i) audit_log chi ghi them: UPDATE va DELETE deu bi trigger cua database chan",
-    _loi44i == [True, True],
-    f"{_loi44i}",
+    "45i) audit_log chi ghi them: UPDATE va DELETE deu bi trigger cua database chan",
+    _loi45i == [True, True],
+    f"{_loi45i}",
 )
 
 # (j) Khong PII: khong dong nao chua email, ten nguoi, ten be hay chu '@'.
-with SessionLocal() as _db44:
-    _chu44 = " ".join(" ".join(str(v) for v in (r.action, r.object_type, r.ip, r.detail) if v)
-                      for r in _db44.query(_AuditLog).all())
+with SessionLocal() as _db45:
+    _chu45 = " ".join(" ".join(str(v) for v in (r.action, r.object_type, r.ip, r.detail) if v)
+                      for r in _db45.query(_AuditLog).all())
 check(
-    "44j) Toan bo audit_log khong chua email, ten phu huynh hay ten be",
-    "@" not in _chu44 and "Phu Huynh" not in _chu44 and "Kiem Toan Hoa" not in _chu44 and "Fixture" not in _chu44,
-    _chu44[:200],
+    "45j) Toan bo audit_log khong chua email, ten phu huynh hay ten be",
+    "@" not in _chu45 and "Phu Huynh" not in _chu45 and "Kiem Toan Hoa" not in _chu45 and "Fixture" not in _chu45,
+    _chu45[:200],
 )
 
 # =====================================================================
