@@ -6937,6 +6937,141 @@ check(
 )
 
 # =====================================================================
+# 42. TANG CUONG BAO MAT DOT 1 (nhanh security, 2026-10-16)
+# =====================================================================
+# Bon ban sua nho: nhanh loi chung cua /chat phai de lai dau vet o log; tai lieu API tat
+# theo mac dinh; header bao mat tren moi response; timeout cho tung loi goi Gemini.
+print("\n--- 42. Tang cuong bao mat dot 1 ---")
+
+
+# (a) Nhanh except Exception cua /chat: ghi traceback va danh tinh dang ma, KHONG ghi noi
+#     dung tin nhan. Truoc ban sua nhanh nay nuot tron exception: 500 khong de lai vet nao.
+class _BatLogDayDu(_logging.Handler):
+    def __init__(self):
+        super().__init__()
+        self.ban_ghi = []
+
+    def emit(self, record):
+        self.ban_ghi.append(record)
+
+
+_bat42 = _BatLogDayDu()
+_log_chat42 = _logging.getLogger("bitss.chat")
+_log_chat42.addHandler(_bat42)
+_tin42 = "Be Tran Thi Mau 2 tuoi di ngoai ra mau tu sang"
+
+
+def _run_hong42(message, principal=None, lich_su=None):
+    raise ValueError("loi lap trinh 42")
+
+
+_chat_mod.run_agent_chat_chi_tiet = _run_hong42
+try:
+    _r42a = client.post("/api/v1/chat", json={"message": _tin42}, headers=PARENT_H)
+finally:
+    _chat_mod.run_agent_chat_chi_tiet = _luu_run
+    _log_chat42.removeHandler(_bat42)
+_loi42a = [r for r in _bat42.ban_ghi if r.levelname == "ERROR"]
+_chu42a = " ".join(r.getMessage() for r in _bat42.ban_ghi)
+check(
+    "42a) /chat loi khong luong truoc -> 500, log ERROR kem traceback va danh tinh dang ma, "
+    "khong chua noi dung tin nhan",
+    _r42a.status_code == 500 and len(_loi42a) == 1
+    and _loi42a[0].exc_info is not None and _loi42a[0].exc_info[0] is ValueError
+    and f"user#{FIXTURE_PARENT_ID}/" in _chu42a
+    and "Tran Thi Mau" not in _chu42a and "ra mau" not in _chu42a
+    and "loi lap trinh 42" not in _r42a.text,
+    f"status={_r42a.status_code} so_dong_error={len(_loi42a)} log={_chu42a[:160]!r}",
+)
+
+# (b) Tai lieu API tat theo mac dinh: bo kiem tra chay khong dat BAT_TAI_LIEU_API.
+_ma42b = {u: client.get(u).status_code for u in ("/docs", "/redoc", "/openapi.json")}
+check(
+    "42b) Khong cau hinh BAT_TAI_LIEU_API -> /docs, /redoc, /openapi.json deu 404",
+    _ma42b == {"/docs": 404, "/redoc": 404, "/openapi.json": 404},
+    f"{_ma42b}",
+)
+
+# (c) Bat duoc khi can, gia tri la lam no luc khoi dong thay vi lang le tat.
+_bat42c = _main.cau_hinh_tai_lieu_api(" True ")
+_tat42c = [_main.cau_hinh_tai_lieu_api(v) for v in ("", "0", "off")]
+try:
+    _main.cau_hinh_tai_lieu_api("bat")
+    _no42c = False
+except _main.CauHinhTaiLieuKhongHopLe:
+    _no42c = True
+check(
+    "42c) BAT_TAI_LIEU_API=true bat ca ba duong dan; rong/0/off tat; gia tri la -> tu choi khoi dong",
+    _bat42c == {"docs_url": "/docs", "redoc_url": "/redoc", "openapi_url": "/openapi.json"}
+    and all(c == {"docs_url": None, "redoc_url": None, "openapi_url": None} for c in _tat42c)
+    and _no42c,
+    f"bat={_bat42c} tat={_tat42c} no={_no42c}",
+)
+
+# (d) Header bao mat: moi response co nosniff/DENY/no-referrer; rieng /api/ them no-store va
+#     CSP, ca khi tra loi 401; endpoint da tu dat Cache-Control (anh) thi giu nguyen.
+_r42me = client.get("/api/v1/auth/me", headers=PARENT_H)
+_r42an = client.get("/api/v1/records")
+_r42goc = client.get("/")
+_r42anh = client.get(f"/api/v1/records/{_RID_30}/anh", headers=PARENT_H)
+
+
+def _co_header_chung42(r):
+    return (r.headers.get("X-Content-Type-Options") == "nosniff"
+            and r.headers.get("X-Frame-Options") == "DENY"
+            and r.headers.get("Referrer-Policy") == "no-referrer")
+
+
+def _co_header_api42(r):
+    return (r.headers.get("Cache-Control") == "no-store"
+            and r.headers.get("Content-Security-Policy") == "default-src 'none'; frame-ancestors 'none'")
+
+
+check(
+    "42d) Header bao mat: /api/ (200 va 401) co no-store + CSP + nosniff; '/' co nosniff nhung "
+    "khong bi ep no-store; anh giu 'private, no-store' cua endpoint",
+    _r42me.status_code == 200 and _co_header_chung42(_r42me) and _co_header_api42(_r42me)
+    and _r42an.status_code == 401 and _co_header_chung42(_r42an) and _co_header_api42(_r42an)
+    and _co_header_chung42(_r42goc) and "Cache-Control" not in _r42goc.headers
+    and _r42anh.status_code == 200 and _r42anh.headers.get("Cache-Control") == "private, no-store",
+    f"me={dict(_r42me.headers)} anon={_r42an.status_code} goc={dict(_r42goc.headers)} "
+    f"anh={_r42anh.status_code}/{_r42anh.headers.get('Cache-Control')}",
+)
+
+# (e) Moi loi goi Gemini mang timeout rieng: bang GEMINI_CALL_TIMEOUT khi han chot con du,
+#     bang phan con lai cua han chot khi it hon, khong bao gio duoi san 1 giay.
+_rep42e, _mod42e, _loi42e = chay_co_loi(P_PARENT, [_FakeResponse(text="ok 42e")])
+def _timeout42(lg):
+    ho = lg["config"].http_options
+    return ho.timeout if ho else None
+
+
+_to42e = [_timeout42(lg) for lg in _mod42e.lan_goi]
+_rep42e2, _mod42e2, _ = chay_co_loi(P_PARENT, [_FakeResponse(text="ok 42e2")], ngan_sach=5)
+_to42e2 = _timeout42(_mod42e2.lan_goi[0])
+_rep42e3, _mod42e3, _ = chay_co_loi(P_PARENT, [_FakeResponse(text="ok 42e3")], ngan_sach=0)
+_to42e3 = _timeout42(_mod42e3.lan_goi[0])
+check(
+    "42e) Loi goi Gemini mang timeout: 30000ms mac dinh, <= 5000ms khi han chot con 5s, "
+    "san 1000ms khi han chot da het",
+    _loi42e is None and _to42e == [int(agent_service.CALL_TIMEOUT_SECONDS * 1000)] and _to42e[0] == 30000
+    and _to42e2 is not None and 4000 <= _to42e2 <= 5000 and _to42e3 == 1000,
+    f"loi={_loi42e} timeout={_to42e} / {_to42e2} / {_to42e3}",
+)
+
+# (f) Het gio la loi tam thoi: thu lai roi tra loi duoc; het gio mai thi thanh TroLyBanTam (503).
+_rep42f, _mod42f, _loi42f = chay_co_loi(
+    P_PARENT, [_httpx.ReadTimeout("het gio 42"), _FakeResponse(text="lan hai thi duoc")]
+)
+_rep42f2, _mod42f2, _loi42f2 = chay_co_loi(P_PARENT, [_httpx.ReadTimeout("het gio")] * _SO_LAN)
+check(
+    "42f) Loi goi het gio -> thu lai nhu dut mang; het gio ca _SO_LAN lan -> TroLyBanTam",
+    _loi42f is None and _rep42f == "lan hai thi duoc" and len(_mod42f.lan_goi) == 2
+    and isinstance(_loi42f2, agent_service.TroLyBanTam) and len(_mod42f2.lan_goi) == _SO_LAN,
+    f"rep={_rep42f!r} lan={len(_mod42f.lan_goi)} loi2={type(_loi42f2).__name__} lan2={len(_mod42f2.lan_goi)}",
+)
+
+# =====================================================================
 print("\n--- TONG KET ---")
 failed = [r for r in results if r[1] == "FAIL"]
 for name, status, detail in results:

@@ -7,10 +7,11 @@ sửa. Với mỗi đột biến, script chạy lại toàn bộ bộ kiểm tra
 thêm ít nhất một kiểm tra so với bản sao chưa đột biến, hoặc làm bộ kiểm tra dừng giữa chừng. Không gọi Gemini
 (bộ kiểm tra tự đặt khoá API rỗng), không đụng data/ thật.
 
-Danh sách gồm 30 đột biến: D01–D19 dựng ngày 2026-10-01, rải trên các thành phần chính, gồm bốn đột biến nhắm
+Danh sách gồm 34 đột biến: D01–D19 dựng ngày 2026-10-01, rải trên các thành phần chính, gồm bốn đột biến nhắm
 thẳng vào bất biến B1–B4; D20–D25 dựng ngày 2026-10-05, mỗi đột biến đảo ngược một bản sửa lỗi sau đợt đo;
 D26 dựng ngày 2026-10-08 cho bản sửa ghi chú JPEG còn sót sau bước làm sạch ảnh; D27–D30 dựng ngày 2026-10-10
-cho phần nối mô hình ảnh (quy đổi nhãn 7 loại sang 4 nhóm, hàng chờ và ảnh cho worker).
+cho phần nối mô hình ảnh (quy đổi nhãn 7 loại sang 4 nhóm, hàng chờ và ảnh cho worker); D31–D34 dựng ngày
+2026-10-16 cho đợt tăng cường bảo mật 1 (log nhánh lỗi của chat, tắt tài liệu API, header bảo mật, timeout Gemini).
 D07 và D12 là đột biến tương đương (không đổi hành vi quan sát được), nên không kiểm tra chức năng nào bắt
 được chúng; chúng được giữ lại để thấy giới hạn của phương pháp.
 """
@@ -92,6 +93,15 @@ DOT_BIEN = [
      '.filter(StoolRecord.inference_status == "queued")'),
     ("D30 ảnh cho worker: bỏ giới hạn trạng thái queued/processing", "app/api/records.py",
      "        if record.inference_status not in TRANG_THAI_WORKER_DOC_ANH:\n", "        if False:\n"),
+    ("D31 chat lỗi không lường trước: hạ log exception xuống debug", "app/api/chat.py",
+     'logging.getLogger("bitss.chat").exception(\n            "[%s] loi khong luong',
+     'logging.getLogger("bitss.chat").debug(\n            "[%s] loi khong luong'),
+    ("D32 tài liệu API: thiếu cấu hình thì bật", "main.py",
+     '_GIA_TRI_BAT = {"1", "true", "yes", "on"}', '_GIA_TRI_BAT = {"", "1", "true", "yes", "on"}'),
+    ("D33 header bảo mật: bỏ Cache-Control no-store cho /api/", "main.py",
+     '    "Cache-Control": "no-store",\n', ""),
+    ("D34 Gemini: gọi không kèm timeout", "app/services/agent_service.py",
+     "config=_gan_timeout(config, han_chot)", "config=config"),
 ]
 
 

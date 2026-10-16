@@ -508,6 +508,22 @@ RETRY_BASE_DELAY = float(os.getenv("GEMINI_RETRY_BASE_DELAY", "1.0"))
 # biến cả tầng thử lại thành mã trang trí không bao giờ chạy tới lần thứ hai.
 RETRY_BUDGET_SECONDS = float(os.getenv("GEMINI_RETRY_BUDGET", "60"))
 
+# Thời gian chờ tối đa cho MỘT lời gọi API (giây). Hạn chót ở trên chỉ được kiểm GIỮA các
+# lần gọi: một kết nối treo không trả gì thì không có lần kiểm tiếp theo nào, và luồng của
+# threadpool bị giữ tới khi TCP tự bỏ cuộc. Mỗi lời gọi vì vậy mang timeout riêng, bằng con
+# số này hoặc phần còn lại của hạn chót nếu ít hơn. 30 giây: đo thật một lời gọi bình thường
+# mất 5–10 giây, lời gọi hỏng treo gần 20 giây rồi mới trả 503 — vẫn để lỗi đó kịp về.
+CALL_TIMEOUT_SECONDS = float(os.getenv("GEMINI_CALL_TIMEOUT", "30"))
+# Sàn của timeout: không bao giờ gửi đi timeout 0, vì với tầng HTTP bên dưới "0" có thể bị
+# hiểu là "không giới hạn" — đúng điều ngược lại.
+CALL_TIMEOUT_TOI_THIEU = 1.0
+
+
+def _gan_timeout(config, han_chot: float):
+    """Bản sao của config kèm timeout cho đúng một lời gọi (HttpOptions tính bằng mili giây)."""
+    giay = min(CALL_TIMEOUT_SECONDS, max(han_chot - time.monotonic(), CALL_TIMEOUT_TOI_THIEU))
+    return config.model_copy(update={"http_options": types.HttpOptions(timeout=int(giay * 1000))})
+
 
 # =====================================================================
 # 4b. Chốt chặn đầu ra: nhãn BITSS nói ra phải có căn cứ trong dữ liệu vừa đọc
@@ -1381,8 +1397,10 @@ def _goi_model(client, contents, config, nhan: str, han_chot: float):
     """
     for lan in range(1, RETRY_MAX_ATTEMPTS + 1):
         try:
+            # Hết giờ là httpx.TimeoutException, con của TransportError: được thử lại như
+            # một lần đứt mạng, rồi thành TroLyBanTam (503) nếu vẫn không qua.
             return client.models.generate_content(
-                model=MODEL_NAME, contents=contents, config=config
+                model=MODEL_NAME, contents=contents, config=_gan_timeout(config, han_chot)
             )
         except Exception as exc:
             loai = _loai_loi_cau_hinh(exc)

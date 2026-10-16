@@ -16,7 +16,7 @@ Mô hình học sâu phân loại ảnh và XAI thuộc repo riêng của thành
   - chặn phán quyết phân luồng;
   - lưới cảnh báo dấu hiệu nguy hiểm;
   - chuẩn hoá về văn bản thường.
-- **Kiểm thử:** 476 kiểm tra tự động, không cần mạng hay khoá API. Chất lượng của chính bộ kiểm tra được đo bằng kiểm thử đột biến (30 đột biến, chạy lại được).
+- **Kiểm thử:** 482 kiểm tra tự động, không cần mạng hay khoá API. Chất lượng của chính bộ kiểm tra được đo bằng kiểm thử đột biến (34 đột biến, chạy lại được). Workflow Security trên GitHub chạy kiểm tra lỗ hổng phụ thuộc (pip-audit), phân tích tĩnh có luật bảo mật (ruff), quét bí mật trong lịch sử git (gitleaks) và bộ kiểm tra này ở mỗi lần push.
 - **Đường nối với mô hình phân loại ảnh đã có, chờ checkpoint.** Worker `scripts/worker_suy_luan.py` lấy ca đang chờ, tải ảnh, chạy mô hình và ghi kết quả qua các endpoint dành cho worker (xác thực bằng `X-Service-Token`). Mô hình của phần mô hình ảnh trả 7 xác suất Type_1..Type_7; `app/services/quy_doi_nhan.py` cộng chúng theo nhóm BITSS (BSFS 1–3, 4, 5–6, 7). Luồng đầy đủ đã được kiểm bằng mô hình giả; chạy với mô hình thật cần checkpoint huấn luyện bằng repo mô hình ảnh (chưa có).
 - **Đánh giá trên Gemini thật đã đo xong** (24/09–04/10/2026, kéo dài nhiều ngày vì hạn mức của gói miễn phí): 4 mô hình × 8 kịch bản × 3 lượt. `gemini-3.6-flash`, `gemini-3.7-flash` và `gemini-3.8-flash` đạt cả 24/24 cặp (kịch bản, lượt); `gemini-3.5-flash-lite` đạt 21/24, cả ba lần trượt đều ở phép kiểm an toàn. Mô hình mặc định vẫn là `gemini-3.6-flash`, vì hai bản mới hơn bị từ chối do quá tải ở khoảng 57% số lần gọi so với 13%. Đợt đo chạy trên mã trước các bản sửa ngày 05/10 và 08/10, chưa đo lại. Kết quả thô nằm trong `outputs/ket_qua_llm/`; quy ước tên tệp và cách tổng hợp ghi trong [`outputs/ket_qua_llm/README.md`](outputs/ket_qua_llm/README.md).
 - **Mọi dữ liệu trong repo là dữ liệu kiểm thử tự tạo.** Không có dữ liệu bệnh nhân thật.
@@ -52,12 +52,12 @@ pediatric-gastro-ai-assistant/
 │   ├── xuat_du_lieu_huan_luyen.py   # Xuất dữ liệu huấn luyện ẩn danh cho phần mô hình
 │   └── worker_suy_luan.py   # Worker suy luận: hàng chờ -> ảnh -> mô hình -> ghi kết quả
 ├── tests/
-│   └── verify_task.py       # 476 kiểm tra tự động (41 mục), chạy trên DB và thư mục tạm
+│   └── verify_task.py       # 482 kiểm tra tự động (42 mục), chạy trên DB và thư mục tạm
 ├── danh_gia/                # Đánh giá
 │   ├── eval_agent.py        # 8 kịch bản trên Gemini thật (tốn hạn mức)
 │   ├── danh_gia_luoi_canh_bao.py    # Lưới cảnh báo trên 67 câu có nhãn, so với 2 chiến lược khác
 │   ├── phan_tich_co_so_toan.py      # Số liệu phần cơ sở toán học: Wilson, bootstrap, McNemar, Bảng 2.2...
-│   └── kiem_thu_dot_bien.py         # Kiểm thử đột biến: 30 lỗi cố ý chèn vào bản sao của mã
+│   └── kiem_thu_dot_bien.py         # Kiểm thử đột biến: 34 lỗi cố ý chèn vào bản sao của mã
 ├── outputs/
 │   ├── ket_qua_luoi_canh_bao.json   # Kết quả đánh giá lưới cảnh báo (tất định)
 │   ├── ket_qua_co_so_toan.json      # Kết quả phan_tich_co_so_toan.py (tất định)
@@ -121,7 +121,7 @@ Chạy máy chủ:
 uv run uvicorn main:app --reload
 ```
 
-Sau đó mở tài liệu API tương tác tại <http://127.0.0.1:8000/docs>. Nếu database chưa khớp phiên bản mã, ứng dụng từ chối khởi động và in ra đúng lệnh cần chạy.
+Tài liệu API tương tác (`/docs`, `/redoc`, `/openapi.json`) tắt theo mặc định để không phát bản đồ toàn bộ endpoint cho người lạ; khi phát triển, đặt `BAT_TAI_LIEU_API=1` trong `.env` rồi mở <http://127.0.0.1:8000/docs>. Nếu database chưa khớp phiên bản mã, ứng dụng từ chối khởi động và in ra đúng lệnh cần chạy.
 
 Chạy worker suy luận (ở cửa sổ khác, máy chủ đang chạy, `INFERENCE_SERVICE_TOKEN` trong `.env` đã đặt). Mô hình giả để thử luồng:
 
@@ -141,15 +141,15 @@ uv run python scripts/worker_suy_luan.py --mo-hinh tien --repo-mo-hinh <đườn
 uv run python tests/verify_task.py
 ```
 
-Bộ kiểm tra tự dựng database tạm và mô hình giả. Nó không cần mạng, không cần khoá API, và không đụng vào `data/`. Kết quả mong đợi là `476/476 PASS`.
+Bộ kiểm tra tự dựng database tạm và mô hình giả. Nó không cần mạng, không cần khoá API, và không đụng vào `data/`. Kết quả mong đợi là `482/482 PASS`.
 
-Để đo chất lượng của chính bộ kiểm tra, chạy kiểm thử đột biến. Script chèn từng lỗi trong 30 lỗi nhỏ vào một bản sao của mã (repo không bị sửa) rồi xem bộ kiểm tra có bắt được không; mất vài phút. Kết quả hiện tại là 28/30; hai đột biến còn lại là đột biến tương đương (không đổi hành vi):
+Để đo chất lượng của chính bộ kiểm tra, chạy kiểm thử đột biến. Script chèn từng lỗi trong 34 lỗi nhỏ vào một bản sao của mã (repo không bị sửa) rồi xem bộ kiểm tra có bắt được không; mất vài phút. Kết quả hiện tại là 32/34; hai đột biến còn lại là đột biến tương đương (không đổi hành vi):
 
 ```bash
 uv run python danh_gia/kiem_thu_dot_bien.py
 ```
 
-Để kiểm tra tĩnh mã nguồn (pyflakes cùng các lỗi cơ bản của pycodestyle), chạy:
+Để kiểm tra tĩnh mã nguồn (pyflakes, các lỗi cơ bản của pycodestyle và luật bảo mật S chuyển từ bandit), chạy:
 
 ```bash
 uvx ruff check

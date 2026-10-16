@@ -232,6 +232,15 @@ def handle_chat(
     except Exception:
         # Không bao giờ trả str(e) ra client: exception nội bộ có thể chứa API key,
         # câu SQL, hoặc đường dẫn file trên máy chủ.
+        #
+        # Nhưng phải để lại dấu vết ở log: trước đây nhánh này nuốt trọn exception, nên 500
+        # của chat là sự cố duy nhất không ai điều tra được. Ghi traceback và danh tính dạng
+        # mã (như mọi dòng log của agent), KHÔNG ghi nội dung tin nhắn: đó là triệu chứng
+        # của một đứa trẻ, và log thường được giữ lâu hơn chính lịch sử chat.
+        logging.getLogger("bitss.chat").exception(
+            "[%s] loi khong luong truoc khi tra loi chat",
+            agent_service._danh_tinh_cho_log(principal),
+        )
         raise HTTPException(
             status_code=500,
             detail=_kem_canh_bao_do("Trợ lý AI tạm thời không phản hồi được, vui lòng thử lại sau.", request.message)

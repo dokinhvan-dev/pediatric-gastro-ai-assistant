@@ -62,6 +62,71 @@ def doc_danh_sach_origin(gia_tri_env=None):
     return cac_origin
 
 
+class CauHinhTaiLieuKhongHopLe(RuntimeError):
+    """BAT_TAI_LIEU_API mang giá trị không đọc được nên ứng dụng từ chối khởi động."""
+
+
+_GIA_TRI_BAT = {"1", "true", "yes", "on"}
+_GIA_TRI_TAT = {"", "0", "false", "no", "off"}
+
+
+def cau_hinh_tai_lieu_api(gia_tri_env=None) -> dict:
+    """Đường dẫn /docs, /redoc, /openapi.json cho FastAPI, đọc từ BAT_TAI_LIEU_API.
+
+    Vì sao mặc định TẮT:
+        Tài liệu tương tác liệt kê mọi endpoint, mọi tham số và cả các endpoint chỉ dành cho
+        worker — bản đồ đầy đủ cho người dò hệ thống, phát sẵn cho bất kỳ ai không cần đăng
+        nhập. Lập trình viên cần nó thì bật trong .env; máy chủ triển khai quên cấu hình thì
+        đóng, cùng nguyên tắc với INFERENCE_SERVICE_TOKEN và CORS_ALLOW_ORIGINS.
+
+    Vì sao giá trị lạ làm nổ thay vì coi là tắt: "BAT_TAI_LIEU_API=bat" là người viết muốn
+    bật. Lặng lẽ tắt khiến họ đi tìm lỗi ở chỗ khác; nổ lúc khởi động thì thấy ngay.
+    """
+    if gia_tri_env is None:
+        gia_tri_env = os.getenv("BAT_TAI_LIEU_API", "")
+    gia_tri = gia_tri_env.strip().lower()
+
+    if gia_tri in _GIA_TRI_BAT:
+        return {"docs_url": "/docs", "redoc_url": "/redoc", "openapi_url": "/openapi.json"}
+    if gia_tri in _GIA_TRI_TAT:
+        return {"docs_url": None, "redoc_url": None, "openapi_url": None}
+    raise CauHinhTaiLieuKhongHopLe(
+        f"BAT_TAI_LIEU_API={gia_tri_env!r} khong hop le. Dung 1/true/yes/on de bat, "
+        "0/false/no/off hoac de trong de tat."
+    )
+
+
+# Header bảo mật gắn vào mọi response. Không có HSTS: header đó chỉ có nghĩa qua HTTPS, và
+# uvicorn ở đây chạy HTTP sau proxy — HSTS đặt ở proxy, nơi kết thúc TLS.
+HEADER_BAO_MAT = {
+    # Trình duyệt không được đoán lại kiểu nội dung: ảnh tải lên không bao giờ bị chạy như HTML.
+    "X-Content-Type-Options": "nosniff",
+    # API không có trang nào cần nhúng vào khung của trang khác.
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+}
+
+# Riêng /api/: dữ liệu ở đây là hồ sơ bệnh án của trẻ, không được nằm lại trong cache của
+# trình duyệt hay proxy dùng chung (máy tính gia đình, máy trạm ở phòng khám). CSP chặn mọi
+# tài nguyên: phản hồi API là JSON hoặc ảnh, không bao giờ cần chạy script. Không áp CSP cho
+# /docs vì Swagger UI tải script từ CDN.
+HEADER_BAO_MAT_API = {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+}
+
+
+async def gan_header_bao_mat(request, call_next):
+    response = await call_next(request)
+    # setdefault: endpoint đã tự đặt header (vd. ảnh dùng "private, no-store") thì giữ nguyên.
+    for ten, gia_tri in HEADER_BAO_MAT.items():
+        response.headers.setdefault(ten, gia_tri)
+    if request.url.path.startswith("/api/"):
+        for ten, gia_tri in HEADER_BAO_MAT_API.items():
+            response.headers.setdefault(ten, gia_tri)
+    return response
+
+
 class SchemaKhongKhop(RuntimeError):
     """Database chưa khớp với model của phiên bản code đang chạy."""
 
@@ -125,8 +190,11 @@ app = FastAPI(
     lifespan=lifespan,
     title="Pediatric Gastro AI Assistant API",
     version="1.0.0",
-    description="Hệ thống Backend hỗ trợ ra quyết định lâm sàng tiêu hóa nhi khoa tích hợp Gemini Agent."
+    description="Hệ thống Backend hỗ trợ ra quyết định lâm sàng tiêu hóa nhi khoa tích hợp Gemini Agent.",
+    **cau_hinh_tai_lieu_api(),
 )
+
+app.middleware("http")(gan_header_bao_mat)
 
 # Chỉ siết origin, KHÔNG siết methods/headers. Lỗ hổng nằm ở chỗ "ai được gọi", không
 # nằm ở chỗ "gọi bằng động từ nào": một khi origin đã nằm trong danh sách tin cậy thì
