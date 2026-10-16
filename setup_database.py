@@ -1,5 +1,6 @@
 import datetime
 import os
+from typing import Optional
 
 from dotenv import load_dotenv
 from sqlalchemy import (
@@ -7,6 +8,10 @@ from sqlalchemy import (
     Boolean, DateTime, Date, ForeignKey, Text, CheckConstraint, Index, event, text
 )
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
+
+# Từ vựng yếu tố lâm sàng là nguồn chuẩn cho CHECK của bảng child_yeu_to. Module đó chỉ phụ
+# thuộc thư viện chuẩn, nên import ở đây không tạo vòng phụ thuộc.
+from app.services.yeu_to_lam_sang import MA_HOP_LE as _MA_YEU_TO_HOP_LE
 
 # Tự nạp .env thay vì trông vào module khác đã nạp trước: DATABASE_URL được đọc lúc import,
 # mà module này thường được import SỚM NHẤT (main -> app.api.auth -> đây, trước security /
@@ -129,10 +134,14 @@ class Child(Base):
     # đi của nó tới model. Xem app/services/yeu_to_lam_sang.py.
     medical_notes = Column(Text, nullable=True)
 
-    # Yếu tố lâm sàng nền, dạng mã ngăn cách bằng dấu phẩy, lấy từ từ vựng có kiểm soát
-    # trong app/services/yeu_to_lam_sang.py. ĐÂY là phần được gửi cho model thay cho
-    # medical_notes: mã định danh không đọc được như mệnh lệnh vì chúng không phải câu.
-    yeu_to_lam_sang = Column(String(255), nullable=True)
+    # Yếu tố lâm sàng nền là thuộc tính ĐA TRỊ, nên nằm ở bảng riêng child_yeu_to (bước 6 của
+    # thuật toán ánh xạ ER sang quan hệ). Trước 16/10/2026 nó là một cột chuỗi mã ngăn cách
+    # bằng dấu phẩy ở đây: không đạt dạng chuẩn 1, database không tự kiểm được mã thuộc từ
+    # vựng, và không truy vấn được "các bé đang bổ sung sắt" bằng SQL thuần. Mã lấy từ từ
+    # vựng có kiểm soát trong app/services/yeu_to_lam_sang.py; ĐÂY là phần được gửi cho model
+    # thay cho medical_notes: mã định danh không đọc được như mệnh lệnh vì chúng không phải câu.
+    _yeu_to = relationship("ChildYeuTo", cascade="all, delete-orphan", order_by="ChildYeuTo.ma",
+                           lazy="selectin")
 
     deleted_at = Column(DateTime, nullable=True)
     pseudonymized_at = Column(DateTime, nullable=True)
@@ -140,6 +149,45 @@ class Child(Base):
     owner = relationship("User", back_populates="children")
     records = relationship("StoolRecord", back_populates="child")
     __table_args__ = (CheckConstraint('weight_kg > 0', name='chk_weight_positive'),)
+
+    @property
+    def yeu_to_lam_sang(self) -> Optional[str]:
+        """Các mã yếu tố lâm sàng, ngăn cách bằng dấu phẩy (None nếu không có).
+
+        Giữ đúng giao diện của cột chuỗi cũ để nơi đọc (yeu_to_lam_sang.doc) và nơi ghi
+        (yeu_to_lam_sang.chuan_hoa) không phải đổi; dữ liệu thật nằm ở bảng child_yeu_to.
+        """
+        ma = [y.ma for y in self._yeu_to]
+        return ",".join(ma) if ma else None
+
+    @yeu_to_lam_sang.setter
+    def yeu_to_lam_sang(self, chuoi: Optional[str]) -> None:
+        # Thay cả tập: các dòng cũ không còn trong danh sách bị xoá nhờ delete-orphan.
+        cac_ma = dict.fromkeys(m.strip() for m in (chuoi or "").split(",") if m.strip())
+        self._yeu_to = [ChildYeuTo(ma=ma) for ma in cac_ma]
+
+
+class ChildYeuTo(Base):
+    """Một yếu tố lâm sàng của một bé: mỗi dòng là một giá trị của thuộc tính đa trị.
+
+    Khoá chính là cặp (child_id, ma), nên một bé không thể có cùng một yếu tố hai lần.
+    CHECK giới hạn mã trong từ vựng có kiểm soát ngay ở database, không chỉ ở tầng ứng dụng.
+    CHECK được tạo cùng bảng: nếu từ vựng đổi, database đã tạo trước đó vẫn giữ danh sách
+    cũ (SQLite không sửa được CHECK), nên đổi từ vựng phải đi kèm migration của bảng này.
+
+    ON DELETE CASCADE: yếu tố lâm sàng là một phần của hồ sơ bé, không có nghĩa khi đứng
+    riêng. Hồ sơ bé chỉ bị xoá mềm nên đường cascade này thực tế chỉ dùng khi xoá cứng.
+    """
+    __tablename__ = "child_yeu_to"
+    child_id = Column(Integer, ForeignKey("children.id", ondelete="CASCADE"), primary_key=True)
+    ma = Column(String(40), primary_key=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "ma IN (" + ", ".join(f"'{m}'" for m in sorted(_MA_YEU_TO_HOP_LE)) + ")",
+            name="chk_yeu_to_trong_tu_vung",
+        ),
+    )
 
 
 class StoolRecord(Base):
@@ -404,6 +452,9 @@ def kiem_tra_schema() -> list:
     """So database với model. Trả về danh sách chỗ lệch, rỗng nghĩa là khớp.
 
     Chỉ ĐỌC, không sửa gì. main.py gọi hàm này lúc khởi động và từ chối chạy nếu có lệch.
+    Ngoài cột và bảng còn thiếu, hàm báo cả những cột đã bỏ khỏi model mà database vẫn còn
+    (COT_DA_BO): dữ liệu nằm trong cột đó chưa được chuyển sang chỗ mới, và chạy tiếp thì
+    ứng dụng đọc chỗ mới, tức là âm thầm mất dữ liệu.
     """
     from sqlalchemy import inspect
 
@@ -425,7 +476,48 @@ def kiem_tra_schema() -> list:
                     f"thiếu cột {bang.name}.{cot.name} (NOT NULL, không tự thêm được — "
                     "cần migration thủ công)"
                 )
+    for bang, cot, cho_moi in COT_DA_BO:
+        if bang in ten_bang_hien_co and cot in {c["name"] for c in thanh_tra.get_columns(bang)}:
+            lech.append(f"cột cũ {bang}.{cot} chưa được chuyển sang {cho_moi} — chạy setup_database.py")
     return lech
+
+
+# Cột đã bỏ khỏi model, kèm nơi dữ liệu của nó được chuyển tới. init_db() chuyển dữ liệu rồi
+# xoá cột; kiem_tra_schema() báo lệch nếu cột vẫn còn.
+COT_DA_BO = [("children", "yeu_to_lam_sang", "bảng child_yeu_to")]
+
+
+def _chuyen_yeu_to_sang_bang_rieng() -> int:
+    """Chuyển cột chuỗi children.yeu_to_lam_sang (bản trước 16/10/2026) sang bảng child_yeu_to.
+
+    Trả về số dòng đã chép. Chạy được nhiều lần: database không còn cột cũ thì không làm gì.
+    Chép và xoá cột nằm trong MỘT giao dịch, nên hoặc dữ liệu đã nằm ở bảng mới và cột cũ biến
+    mất, hoặc không có gì thay đổi. Mã không thuộc từ vựng bị bỏ qua và in ra: ở bản cũ chúng
+    cũng không bao giờ tới được model (yeu_to_lam_sang.doc bỏ qua mã lạ).
+    """
+    from sqlalchemy import inspect
+
+    thanh_tra = inspect(engine)
+    if "children" not in thanh_tra.get_table_names():
+        return 0
+    if "yeu_to_lam_sang" not in {c["name"] for c in thanh_tra.get_columns("children")}:
+        return 0
+
+    so_dong = 0
+    with engine.begin() as ket_noi:
+        dong = ket_noi.exec_driver_sql(
+            "SELECT id, yeu_to_lam_sang FROM children WHERE yeu_to_lam_sang IS NOT NULL"
+        ).fetchall()
+        for child_id, chuoi in dong:
+            for ma in dict.fromkeys(m.strip() for m in chuoi.split(",") if m.strip()):
+                if ma not in _MA_YEU_TO_HOP_LE:
+                    print(f"Bo qua ma yeu to la '{ma}' cua be #{child_id}")
+                    continue
+                so_dong += ket_noi.exec_driver_sql(
+                    "INSERT OR IGNORE INTO child_yeu_to (child_id, ma) VALUES (?, ?)", (child_id, ma)
+                ).rowcount
+        ket_noi.exec_driver_sql("ALTER TABLE children DROP COLUMN yeu_to_lam_sang")
+    return so_dong
 
 
 def init_db():
@@ -440,6 +532,9 @@ def init_db():
     test độc lập với schema demo có thể thay đổi bất cứ lúc nào).
     """
     Base.metadata.create_all(bind=engine)
+    so_chuyen = _chuyen_yeu_to_sang_bang_rieng()
+    if so_chuyen:
+        print(f"Da chuyen {so_chuyen} yeu to lam sang sang bang child_yeu_to")
     da_them = _bo_sung_cot_thieu()
     if da_them:
         print("Da bo sung cot con thieu:", ", ".join(da_them))

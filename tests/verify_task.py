@@ -4755,7 +4755,7 @@ finally:
 
 check(
     "26i) Bo sung duoc cot con thieu vao database da ton tai",
-    "children.yeu_to_lam_sang" in _da_them,
+    "children.medical_notes" in _da_them,
     f"da_them={_da_them}",
 )
 
@@ -5105,7 +5105,7 @@ finally:
 check(
     "28f) Cot NOT NULL khong tu them duoc thi bao ro 'can migration thu cong'",
     any("children.owner_user_id" in x and "thủ công" in x for x in _lech_nn)
-    and not any("children.yeu_to_lam_sang" in x for x in _lech_nn),
+    and not any("children.medical_notes" in x for x in _lech_nn),
     str([x for x in _lech_nn if "children." in x])[:250],
 )
 
@@ -6237,6 +6237,11 @@ _rl.xoa_het()
 _TMP_36 = tempfile.mkdtemp(prefix="bitss_env_")
 _DB_36 = "sqlite:///" + os.path.join(_TMP_36, "tu_dotenv.db").replace("\\", "/")
 shutil.copy(os.path.join(GOC_DU_AN, "setup_database.py"), _TMP_36)
+# setup_database lay tu vung yeu to lam sang lam CHECK cho bang child_yeu_to (tu 16/10), nen
+# chep kem dung module tu vung do (module chi dung thu vien chuan) cung cau truc package.
+os.makedirs(os.path.join(_TMP_36, "app", "services"))
+for _tep36 in ("app/__init__.py", "app/services/__init__.py", "app/services/yeu_to_lam_sang.py"):
+    shutil.copy(os.path.join(GOC_DU_AN, _tep36), os.path.join(_TMP_36, _tep36))
 with open(os.path.join(_TMP_36, ".env"), "w", encoding="utf-8") as _f36:
     _f36.write(f"DATABASE_URL={_DB_36}\n")
 _env_36 = {k: v for k, v in os.environ.items() if k != "DATABASE_URL"}
@@ -6934,6 +6939,114 @@ check(
     and all(tt == "completed" or (tt == "failed" and co_ly_do) for tt, co_ly_do in _sau41i.values())
     and _kq41i["xong"] == sum(1 for tt, _ in _sau41i.values() if tt == "completed"),
     f"dau={_dau41} dem={_kq41i} sau={_sau41i}",
+)
+
+# =====================================================================
+# 42. YEU TO LAM SANG LA THUOC TINH DA TRI: TACH THANH BANG RIENG (2026-10-16)
+# =====================================================================
+# Truoc 16/10 yeu to lam sang la mot cot chuoi ma ngan cach dau phay trong children (khong dat
+# dang chuan 1). Nay moi gia tri la mot dong cua child_yeu_to, khoa chinh (child_id, ma), CHECK
+# gioi han ma trong tu vung; init_db chuyen du lieu cu roi bo cot cu.
+print("\n--- 42. Yeu to lam sang: tach thuoc tinh da tri thanh bang rieng ---")
+from sqlalchemy import inspect as _insp42  # noqa: E402
+from sqlalchemy.exc import IntegrityError as _IntegrityError42  # noqa: E402
+
+from setup_database import ChildYeuTo as _ChildYeuTo42  # noqa: E402
+
+# (a) Luoc do: bang child_yeu_to co khoa chinh (child_id, ma); children khong con cot chuoi cu.
+_tt42 = _insp42(engine)
+_pk42 = _tt42.get_pk_constraint("child_yeu_to")["constrained_columns"]
+_cot42 = {c["name"] for c in _tt42.get_columns("children")}
+check(
+    "42a) Bang child_yeu_to co khoa chinh (child_id, ma); children khong con cot chuoi yeu_to_lam_sang",
+    sorted(_pk42) == ["child_id", "ma"] and "yeu_to_lam_sang" not in _cot42,
+    f"pk={_pk42} cot_children_co_cu={'yeu_to_lam_sang' in _cot42}",
+)
+
+# (b) Tao be qua API voi ma trung lap -> moi ma dung mot dong; API tra lai dung tap ma.
+_r42 = client.post("/api/v1/children", json={
+    "name": "Be Yeu To Da Tri", "date_of_birth": "2026-03-01", "feeding_type": "Bu me hoan toan",
+    "yeu_to_lam_sang": ["dang_bo_sung_sat", "sinh_non", "dang_bo_sung_sat"],
+}, headers=PARENT_H)
+_be42 = _r42.json()["data"]["child_id"] if _r42.status_code == 201 else -1
+with SessionLocal() as _db42:
+    _dong42 = sorted(m for (m,) in _db42.query(_ChildYeuTo42.ma).filter(_ChildYeuTo42.child_id == _be42).all())
+check(
+    "42b) Tao be voi ma trung lap -> moi ma dung mot dong trong child_yeu_to; API tra dung tap ma",
+    _r42.status_code == 201 and _dong42 == ["dang_bo_sung_sat", "sinh_non"]
+    and set(_r42.json()["data"]["yeu_to_lam_sang"]) == {"dang_bo_sung_sat", "sinh_non"},
+    f"status={_r42.status_code} dong={_dong42}",
+)
+
+# (c) Database tu tu choi ma ngoai tu vung, ke ca khi ghi thang khong qua tang ung dung.
+_ma_la42 = None
+with SessionLocal() as _db42:
+    _db42.add(_ChildYeuTo42(child_id=_be42, ma="tu_khai_khong_co_that"))
+    try:
+        _db42.commit()
+    except _IntegrityError42 as _loi42:
+        _db42.rollback()
+        _ma_la42 = "CHECK" if "chk_yeu_to_trong_tu_vung" in str(_loi42) or "CHECK" in str(_loi42) else str(_loi42)[:80]
+check(
+    "42c) Ghi thang ma ngoai tu vung vao child_yeu_to -> database tu choi (CHECK)",
+    _ma_la42 == "CHECK",
+    f"ket_qua={_ma_la42}",
+)
+
+# (d) Cau hoi truoc day khong viet duoc bang SQL thuan: cac be dang bo sung sat.
+with SessionLocal() as _db42:
+    _sat42 = {cid for (cid,) in _db42.query(_ChildYeuTo42.child_id)
+              .filter(_ChildYeuTo42.ma == "dang_bo_sung_sat").all()}
+check(
+    "42d) Truy van SQL thuan 'cac be dang bo sung sat' tra dung be vua tao",
+    _be42 in _sat42,
+    f"be={_be42} ket_qua={sorted(_sat42)[:6]}",
+)
+
+# (e) Database cu con cot chuoi: kiem_tra_schema bao lech; init_db chuyen ma hop le (bo ma la,
+#     bo trung), xoa cot cu; chay lai lan hai vo hai va schema khop.
+import sqlite3 as _sqlite3_42  # noqa: E402
+
+import setup_database as _sd42  # noqa: E402
+
+_db_cu42 = os.path.join(_TMP_ROOT, "db_cu_yeu_to.db")
+_engine_that42 = _sd42.engine
+_sd42.engine = _sd42.create_engine(f"sqlite:///{_db_cu42.replace(chr(92), '/')}",
+                                   connect_args={"check_same_thread": False})
+try:
+    _sd42.Base.metadata.create_all(bind=_sd42.engine)
+    _kn42 = _sqlite3_42.connect(_db_cu42)
+    _kn42.execute("ALTER TABLE children ADD COLUMN yeu_to_lam_sang VARCHAR(255)")
+    _kn42.execute("INSERT INTO users (id, email, password_hash, full_name, role, is_active, created_at) "
+                  "VALUES (1, 'a@b.c', 'x', 'A', 'parent', 1, '2026-01-01')")
+    _kn42.execute("INSERT INTO children (id, owner_user_id, name, date_of_birth, feeding_type, yeu_to_lam_sang) "
+                  "VALUES (7, 1, 'B', '2026-01-01', 'Sữa công thức', 'dang_bo_sung_sat, ma_la,sinh_non,sinh_non')")
+    _kn42.commit()
+    _kn42.close()
+    _lech_truoc42 = _sd42.kiem_tra_schema()
+    # Ma la bi bo phai duoc bao cho nguoi van hanh: INSERT OR IGNORE cua SQLite bo qua ca dong
+    # vi pham CHECK mot cach im lang, nen khong co dong canh bao nay thi du lieu mat khong dau vet.
+    import contextlib as _ctx42  # noqa: E402
+    import io as _io42  # noqa: E402
+    _in42 = _io42.StringIO()
+    with _ctx42.redirect_stdout(_in42):
+        _so_chuyen42 = _sd42._chuyen_yeu_to_sang_bang_rieng()
+    _so_lan_hai42 = _sd42._chuyen_yeu_to_sang_bang_rieng()
+    _lech_sau42 = _sd42.kiem_tra_schema()
+    _kn42 = _sqlite3_42.connect(_db_cu42)
+    _dong_moi42 = sorted(r[0] for r in _kn42.execute("SELECT ma FROM child_yeu_to WHERE child_id = 7"))
+    _cot_con42 = [r[1] for r in _kn42.execute("PRAGMA table_info(children)")]
+    _kn42.close()
+finally:
+    _sd42.engine = _engine_that42
+check(
+    "42e) DB cu: kiem_tra_schema bao cot cu chua chuyen; chuyen dung 2 ma hop le, bao ma la bi bo, "
+    "bo cot cu; chay lai vo hai, schema khop",
+    any("children.yeu_to_lam_sang" in x and "child_yeu_to" in x for x in _lech_truoc42)
+    and "'ma_la'" in _in42.getvalue()
+    and _so_chuyen42 == 2 and _so_lan_hai42 == 0 and _lech_sau42 == []
+    and _dong_moi42 == ["dang_bo_sung_sat", "sinh_non"] and "yeu_to_lam_sang" not in _cot_con42,
+    f"truoc={_lech_truoc42} chuyen={_so_chuyen42} lan_hai={_so_lan_hai42} sau={_lech_sau42} dong={_dong_moi42}",
 )
 
 # =====================================================================
