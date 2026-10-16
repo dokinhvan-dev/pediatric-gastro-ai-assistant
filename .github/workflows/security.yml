@@ -1,0 +1,66 @@
+# Cong kiem tra bao mat: moi lan push, moi PR vao main, va thu Hai hang tuan (CVE moi duoc
+# cong bo ca khi ma khong doi). Bon job doc lap; PR chi duoc merge khi ca bon deu xanh.
+name: Security
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 2 * * 1"
+  workflow_dispatch:
+
+# Quyen toi thieu: workflow chi doc ma, khong ghi gi len repo.
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependencies:
+    name: Lo hong phu thuoc (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      # Kiem dung tap phu thuoc da khoa trong uv.lock (khong gom nhom dev), khong phai ban
+      # moi nhat tren PyPI: day la thu that su chay tren may chu.
+      - name: Xuat danh sach phu thuoc tu uv.lock
+        run: uv export --frozen --no-dev --no-emit-project -o requirements-audit.txt
+      - name: pip-audit
+        run: uvx pip-audit -r requirements-audit.txt --no-deps --disable-pip --strict
+
+  static-analysis:
+    name: Phan tich tinh (ruff + luat S)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      # Bo luat lay tu pyproject.toml, nen chay "uvx ruff check" tren may cho cung ket qua.
+      - name: ruff check
+        run: uvx ruff check --output-format github
+
+  secrets:
+    name: Ro ri bi mat (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Quet TOAN BO lich su: mot khoa da commit roi xoa o commit sau van con trong git.
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  tests:
+    name: Kiem thu (verify_task.py)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      # verify_task.py tu dat DATABASE_URL, UPLOAD_DIR va khoa gia vao thu muc tam, de trong
+      # GEMINI_API_KEY: khong can bi mat nao cua repo va khong goi Gemini that.
+      - name: verify_task.py
+        run: uv run --frozen python tests/verify_task.py

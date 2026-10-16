@@ -39,7 +39,7 @@ ACCESS_TOKEN_EXPIRE_HOURS = 12
 #     decode_token vẫn từ chối được bất kỳ token nào không mang đúng nhãn này — kể cả
 #     guest token cũ còn hạn 30 ngày do bản trước phát ra. Bỏ trường đi thì những token
 #     đó bỗng dưng hợp lệ vì chữ ký vẫn đúng, chỉ là không còn ai kiểm tra chúng là loại gì.
-TOKEN_TYPE_USER = "user"
+TOKEN_TYPE_USER = "user"  # noqa: S105 - nhãn loại token, không phải mật khẩu
 
 
 class TokenError(Exception):

@@ -1276,7 +1276,7 @@ def _extract_text(response) -> str | None:
         text = response.text
         if text and text.strip():
             return text.strip()
-    except Exception:
+    except Exception:  # noqa: S110 - response.text ném lỗi khi bị lọc an toàn; thử gom part ở dưới
         pass
 
     # Thử gom thủ công các part có text
@@ -1367,7 +1367,7 @@ def _thoi_gian_cho(lan: int) -> float:
     dồn cục đúng thứ đang cố tránh.
     """
     cho = RETRY_BASE_DELAY * (2 ** (lan - 1))
-    return cho * (0.5 + random.random() / 2)
+    return cho * (0.5 + random.random() / 2)  # noqa: S311 - jitter thời gian chờ, không dùng cho mật mã
 
 
 def _goi_model(client, contents, config, nhan: str, han_chot: float):

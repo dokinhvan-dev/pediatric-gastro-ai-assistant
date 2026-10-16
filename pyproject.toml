@@ -28,4 +28,12 @@ target-version = "py314"
 [tool.ruff.lint]
 # Tap luat nen kinh dien cua ruff: pyflakes (F: import thua, ten chua dinh nghia, bien khong
 # dung) va loi co ban cua pycodestyle (E4, E7, E9). Chay: uvx ruff check
-select = ["E4", "E7", "E9", "F"]
+# S: luat bao mat (chuyen tu bandit): bi mat go cung, SQL ghep chuoi, subprocess, pickle,
+# random cho mat ma... Diem nao chap nhan duoc thi danh "# noqa: Sxxx - <ly do>" ngay tai dong.
+select = ["E4", "E7", "E9", "F", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+# Kiem thu va danh gia CO Y dung khoa gia, assert, subprocess va random co hat giong: luat S o
+# day chi bao nham. Ma chay tren may chu (app/, scripts/, main.py, setup_database.py) van bi kiem.
+"tests/**" = ["S"]
+"danh_gia/**" = ["S"]
