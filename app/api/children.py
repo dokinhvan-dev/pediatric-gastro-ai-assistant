@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from setup_database import SessionLocal, Child, StoolRecord
 from app.api.deps import CurrentUser, get_current_user
-from app.services import chat_history, yeu_to_lam_sang
+from app.services import chat_history, nhat_ky_kiem_toan as kiem_toan, yeu_to_lam_sang
 from app.services.authz import da_xoa_mem
 
 router = APIRouter(prefix="/api/v1/children", tags=["Children"])
@@ -159,6 +159,8 @@ def create_child(payload: ChildIn, user: CurrentUser = Depends(get_current_user)
         )
         try:
             db.add(child)
+            db.flush()
+            kiem_toan.ghi(db, user, kiem_toan.TAO_HO_SO_BE, "child", child.id)
             db.commit()
             db.refresh(child)
         except Exception:
@@ -263,6 +265,11 @@ def soft_delete_child(child_id: int, user: CurrentUser = Depends(get_current_use
         # mình, và đã xoá rồi. Tách ra sẽ biến endpoint thành công cụ dò xem hệ thống
         # đang quản lý những hồ sơ nào — đúng thứ mà việc trả 404 thay cho 403 ở khắp
         # nơi trong dự án này sinh ra để chặn.
+        # Hồ sơ CÓ thật mà không phải của mình: vẫn trả 404 như mọi trường hợp khác, nhưng
+        # ghi lại — đây là dấu hiệu ai đó đang thử ID của nhà khác.
+        if child and not da_xoa_mem(child) and child.owner_user_id != user.id:
+            kiem_toan.ghi_rieng(user, kiem_toan.TRUY_CAP_BI_TU_CHOI, "child", child.id,
+                                ket_qua=kiem_toan.BI_TU_CHOI, chi_tiet=kiem_toan.XOA_HO_SO_BE)
         if not child or child.owner_user_id != user.id or da_xoa_mem(child):
             raise HTTPException(status_code=404, detail=f"Không tìm thấy bệnh nhi có ID: {child_id}")
 
@@ -278,6 +285,7 @@ def soft_delete_child(child_id: int, user: CurrentUser = Depends(get_current_use
             # luôn, và loại lỗi đó khó truy hơn hẳn.
             so_tin_chat = chat_history.xoa_lich_su_chua_commit(db, user)
             child.deleted_at = datetime.now(timezone.utc)
+            kiem_toan.ghi(db, user, kiem_toan.XOA_HO_SO_BE, "child", child.id)
             db.commit()
         except Exception:
             db.rollback()

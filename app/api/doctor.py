@@ -25,7 +25,7 @@ from sqlalchemy.exc import IntegrityError
 
 from setup_database import SessionLocal, StoolRecord, DoctorReview
 from app.api.deps import CurrentUser, assert_can_view_record, get_current_user, require_doctor
-from app.services import bitss
+from app.services import bitss, nhat_ky_kiem_toan as kiem_toan
 
 router = APIRouter(prefix="/api/v1/records", tags=["Doctor Review"])
 
@@ -213,6 +213,9 @@ def submit_doctor_review(
             # review_status của ca vẫn là 'pending' — hai nguồn dữ liệu nói hai điều
             # khác nhau mà không có cách nào phát hiện về sau.
             record.review_status = payload.decision
+            # Ai chốt nhãn ca nào: cùng transaction với review, nên không có review nào
+            # không có dòng nhật ký và ngược lại.
+            kiem_toan.ghi(db, doctor, kiem_toan.DUYET_CA, "record", record.id, chi_tiet=payload.decision)
             db.commit()
             db.refresh(review)
             db.refresh(record)
@@ -287,6 +290,8 @@ def list_doctor_reviews(record_id: int, principal: CurrentUser = Depends(get_cur
             raise HTTPException(status_code=404, detail=f"Không tìm thấy ca phân tích có ID: {record_id}")
 
         assert_can_view_record(db, record, principal)
+        kiem_toan.ghi(db, principal, kiem_toan.XEM_DANH_SACH_DUYET, "record", record.id)
+        db.commit()
 
         reviews = (
             db.query(DoctorReview)

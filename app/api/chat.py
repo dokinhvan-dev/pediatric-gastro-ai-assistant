@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 
 from setup_database import SessionLocal
 from app.api.deps import chan_neu_qua_han_muc, get_optional_principal
-from app.services import agent_service, chat_history, dong_y
+from app.services import agent_service, chat_history, dong_y, nhat_ky_kiem_toan
 from app.services.agent_service import (
     ChuaCauHinhAI, HetHanMucNgay, LoiCauHinhAI, TroLyBanTam, run_agent_chat_chi_tiet,
 )
@@ -290,4 +290,7 @@ def clear_chat_history(principal: Optional[object] = Depends(get_optional_princi
     """
     with SessionLocal() as db:
         so_dong = chat_history.xoa_lich_su(db, principal)
+    if isinstance(principal, CurrentUser):
+        nhat_ky_kiem_toan.ghi_rieng(principal, nhat_ky_kiem_toan.XOA_LICH_SU_CHAT, "user", principal.id,
+                                    chi_tiet=str(so_dong))
     return {"status": "success", "so_tin_da_xoa": so_dong}

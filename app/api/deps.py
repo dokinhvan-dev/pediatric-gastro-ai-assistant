@@ -263,6 +263,10 @@ def assert_can_view_record(db, record, principal) -> None:
         raise _unauthorized("Cần đăng nhập để xem ca phân tích.")
 
     if not can_view_record(db, record, principal):
+        # Phiên riêng: phiên của request sẽ không commit vì exception ngay dưới đây.
+        from app.services import nhat_ky_kiem_toan as kiem_toan
+        kiem_toan.ghi_rieng(principal, kiem_toan.TRUY_CAP_BI_TU_CHOI, "record", record.id,
+                            ket_qua=kiem_toan.BI_TU_CHOI)
         raise HTTPException(
             status_code=404,
             detail=f"Không tìm thấy ca phân tích có ID: {record.id}",

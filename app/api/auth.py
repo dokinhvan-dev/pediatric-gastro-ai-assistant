@@ -25,7 +25,7 @@ from app.api.deps import (
     get_current_user,
     get_token_payload,
 )
-from app.services import chat_history, dong_y, dong_y_nghien_cuu, security, token_store
+from app.services import chat_history, dong_y, dong_y_nghien_cuu, nhat_ky_kiem_toan as kiem_toan, security, token_store
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Auth"])
 
@@ -121,6 +121,8 @@ def register(payload: RegisterIn, request: Request):
         )
         try:
             db.add(user)
+            db.flush()
+            kiem_toan.ghi(db, None, kiem_toan.DANG_KY, "user", user.id)
             db.commit()
             db.refresh(user)
         except IntegrityError:
@@ -189,13 +191,24 @@ def login(payload: LoginIn, request: Request):
             # không những không chạy mà còn tự tạo ra tín hiệu thời gian lớn hơn hẳn.
             # Xem DUMMY_PASSWORD_HASH trong app/services/security.py.
             security.verify_password(payload.password, security.DUMMY_PASSWORD_HASH)
+            # Cả hai nhánh sai đều ghi đúng MỘT dòng nhật ký, để lượt ghi không thành chênh
+            # lệch thời gian mới giữa email có và không có tài khoản.
+            kiem_toan.ghi_rieng(None, kiem_toan.DANG_NHAP_THAT_BAI, ket_qua=kiem_toan.BI_TU_CHOI)
             raise sai_thong_tin
 
         if not security.verify_password(payload.password, user.password_hash):
+            # Người làm là người lạ (chưa xác thực); tài khoản bị thử là ĐỐI TƯỢNG.
+            kiem_toan.ghi_rieng(None, kiem_toan.DANG_NHAP_THAT_BAI, "user", user.id,
+                                ket_qua=kiem_toan.BI_TU_CHOI)
             raise sai_thong_tin
 
         if not user.is_active:
+            kiem_toan.ghi_rieng(None, kiem_toan.DANG_NHAP_THAT_BAI, "user", user.id,
+                                ket_qua=kiem_toan.BI_TU_CHOI, chi_tiet="tai_khoan_vo_hieu")
             raise HTTPException(status_code=403, detail="Tài khoản đã bị vô hiệu hoá.")
+
+        kiem_toan.ghi_rieng(CurrentUser(id=user.id, email=user.email, full_name=user.full_name, role=user.role),
+                            kiem_toan.DANG_NHAP, "user", user.id)
 
         return TokenOut(
             access_token=security.create_user_token(user.id, user.role),
@@ -240,6 +253,7 @@ def logout(
         # thông thường, nên gánh thêm việc dọn ở đây không làm chậm ai cả.
         token_store.don_token_het_han(db)
 
+    kiem_toan.ghi_rieng(user, kiem_toan.DANG_XUAT, "user", user.id)
     return {"status": "success", "message": "Đã đăng xuất."}
 
 
@@ -294,6 +308,8 @@ def dat_nghien_cuu_mac_dinh(payload: NghienCuuMacDinhIn, user: CurrentUser = Dep
     with SessionLocal() as db:
         u = db.query(User).filter(User.id == user.id).first()
         u.nghien_cuu_mac_dinh_phien_ban = dong_y_nghien_cuu.PHIEN_BAN_THONG_BAO if payload.bat else None
+        kiem_toan.ghi(db, user, kiem_toan.DAT_NGHIEN_CUU_MAC_DINH, "user", user.id,
+                      chi_tiet="bat" if payload.bat else "tat")
         db.commit()
     return {"status": "success", "nghien_cuu_mac_dinh": payload.bat}
 
@@ -325,6 +341,7 @@ def dong_y_chia_se_ai(payload: DongYIn, user: CurrentUser = Depends(get_current_
     with SessionLocal() as db:
         u = db.query(User).filter(User.id == user.id).first()
         dong_y.ghi_dong_y(u)
+        kiem_toan.ghi(db, user, kiem_toan.DONG_Y_AI, "user", user.id, chi_tiet=dong_y.PHIEN_BAN_THONG_BAO)
         db.commit()
         return {
             "status": "success",
@@ -356,6 +373,7 @@ def rut_dong_y_chia_se_ai(user: CurrentUser = Depends(get_current_user)):
         u = db.query(User).filter(User.id == user.id).first()
         dong_y.rut_dong_y(u)
         so_tin_da_xoa = chat_history.xoa_lich_su_chua_commit(db, user)
+        kiem_toan.ghi(db, user, kiem_toan.RUT_DONG_Y_AI, "user", user.id)
         db.commit()
     return {
         "status": "success",

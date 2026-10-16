@@ -346,6 +346,62 @@ class ChatMessage(Base):
     )
 
 
+class AuditLog(Base):
+    """Nhật ký kiểm toán: ai làm gì với hồ sơ nào, lúc nào, từ đâu, được hay bị từ chối.
+
+    Trả lời những câu mà log ứng dụng không trả lời được: ai đã xem ảnh của bé này, ai chốt
+    nhãn ca này, gia đình rút đồng thuận lúc nào. Ghi qua app/services/nhat_ky_kiem_toan.py.
+
+    Chỉ chứa mã định danh và mã hành động — KHÔNG tên, email, nội dung tin nhắn hay kết quả
+    lâm sàng. Nhật ký thường sống lâu hơn dữ liệu nó mô tả, và không được thành bản sao PII.
+
+    Vì sao không có khoá ngoại tới users/children/stool_records:
+        RESTRICT sẽ khiến không xoá được người dùng hay hồ sơ nào đã từng được xem; CASCADE
+        thì xoá dữ liệu kéo theo xoá luôn dấu vết ai đã đụng vào nó — đúng thứ nhật ký này
+        phải giữ. Cột chỉ là số; nhật ký vẫn đứng được khi đối tượng không còn.
+
+    Chỉ ghi thêm: trigger (tạo cùng bảng, xem bên dưới) chặn mọi UPDATE và DELETE ngay ở
+    database, không chỉ ở tầng ứng dụng.
+    """
+    __tablename__ = "audit_log"
+
+    id = Column(Integer, primary_key=True)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), nullable=False)
+    # NULL khi chưa đăng nhập hoặc là worker suy luận; actor_role phân biệt hai trường hợp.
+    actor_user_id = Column(Integer, nullable=True)
+    actor_role = Column(String(20), nullable=False)
+    action = Column(String(50), nullable=False)
+    object_type = Column(String(20), nullable=True)
+    object_id = Column(Integer, nullable=True)
+    outcome = Column(String(10), nullable=False)
+    ip = Column(String(45), nullable=True)
+    # Mã ngắn (tên công cụ, quyết định duyệt), không bao giờ là văn bản tự do của người dùng.
+    detail = Column(String(100), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("outcome IN ('success', 'denied')", name="chk_audit_outcome_valid"),
+        # "Ai đã đụng vào hồ sơ này" và "người này đã làm gì" là hai câu hỏi thường gặp nhất.
+        Index("ix_audit_object_time", "object_type", "object_id", "created_at"),
+        Index("ix_audit_actor_time", "actor_user_id", "created_at"),
+    )
+
+
+TRIGGER_AUDIT_CHI_GHI_THEM = (
+    "CREATE TRIGGER IF NOT EXISTS trg_audit_log_cam_sua BEFORE UPDATE ON audit_log "
+    "BEGIN SELECT RAISE(ABORT, 'audit_log chi duoc ghi them'); END",
+    "CREATE TRIGGER IF NOT EXISTS trg_audit_log_cam_xoa BEFORE DELETE ON audit_log "
+    "BEGIN SELECT RAISE(ABORT, 'audit_log chi duoc ghi them'); END",
+)
+
+
+@event.listens_for(AuditLog.__table__, "after_create")
+def _tao_trigger_audit(target, connection, **kw):
+    # Chỉ SQLite: cú pháp trigger khác nhau giữa các database, và dự án hiện chỉ chạy SQLite.
+    if connection.dialect.name == "sqlite":
+        for cau_lenh in TRIGGER_AUDIT_CHI_GHI_THEM:
+            connection.exec_driver_sql(cau_lenh)
+
+
 # =====================================================================
 # Đồng bộ database đã tồn tại với model
 #

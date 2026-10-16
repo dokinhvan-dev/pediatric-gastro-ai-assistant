@@ -7,12 +7,14 @@ sửa. Với mỗi đột biến, script chạy lại toàn bộ bộ kiểm tra
 thêm ít nhất một kiểm tra so với bản sao chưa đột biến, hoặc làm bộ kiểm tra dừng giữa chừng. Không gọi Gemini
 (bộ kiểm tra tự đặt khoá API rỗng), không đụng data/ thật.
 
-Danh sách gồm 43 đột biến: D01–D19 dựng ngày 2026-10-01, rải trên các thành phần chính, gồm bốn đột biến nhắm
+Danh sách gồm 50 đột biến: D01–D19 dựng ngày 2026-10-01, rải trên các thành phần chính, gồm bốn đột biến nhắm
 thẳng vào bất biến B1–B4; D20–D25 dựng ngày 2026-10-05, mỗi đột biến đảo ngược một bản sửa lỗi sau đợt đo;
 D26 dựng ngày 2026-10-08 cho bản sửa ghi chú JPEG còn sót sau bước làm sạch ảnh; D27–D30 dựng ngày 2026-10-10
 cho phần nối mô hình ảnh (quy đổi nhãn 7 loại sang 4 nhóm, hàng chờ và ảnh cho worker); D31–D34 dựng ngày
 2026-10-16 cho đợt tăng cường bảo mật 1 (log nhánh lỗi của chat, tắt tài liệu API, header bảo mật, timeout Gemini);
-D35–D43 dựng cùng ngày, mỗi đột biến gỡ một chốt phân quyền theo đối tượng mà ma trận route × vai (mục 43) phải bắt.
+D35–D43 dựng cùng ngày, mỗi đột biến gỡ một chốt phân quyền theo đối tượng mà ma trận route × vai (mục 43) phải bắt;
+D44–D50 dựng cùng ngày cho nhật ký kiểm toán (mục 44): bỏ ghi ở từng loại sự kiện, bỏ trigger chỉ-ghi-thêm, trợ lý
+vẫn trả dữ liệu khi không ghi được nhật ký, không ghi IP.
 D07 và D12 là đột biến tương đương (không đổi hành vi quan sát được), nên không kiểm tra chức năng nào bắt
 được chúng; chúng được giữ lại để thấy giới hạn của phương pháp.
 """
@@ -123,6 +125,24 @@ DOT_BIEN = [
     ("D43 không được xem ca: 404 thành 403 (lộ ca có tồn tại)", "app/api/deps.py",
      '            status_code=404,\n            detail=f"Không tìm thấy ca phân tích có ID: {record.id}",',
      '            status_code=403,\n            detail=f"Không tìm thấy ca phân tích có ID: {record.id}",'),
+    ("D44 nhật ký: xem ca không ghi", "app/api/records.py",
+     '        kiem_toan.ghi(db, principal, kiem_toan.XEM_CA, "record", record.id)\n', ""),
+    ("D45 nhật ký: chốt nhãn không ghi", "app/api/doctor.py",
+     '            kiem_toan.ghi(db, doctor, kiem_toan.DUYET_CA, "record", record.id, chi_tiet=payload.decision)\n', ""),
+    ("D46 nhật ký: lượt bị từ chối không ghi", "app/api/deps.py",
+     '        kiem_toan.ghi_rieng(principal, kiem_toan.TRUY_CAP_BI_TU_CHOI, "record", record.id,\n'
+     '                            ket_qua=kiem_toan.BI_TU_CHOI)\n', ""),
+    ("D47 nhật ký: không tạo trigger chỉ-ghi-thêm", "setup_database.py",
+     '    if connection.dialect.name == "sqlite":\n        for cau_lenh in TRIGGER_AUDIT_CHI_GHI_THEM:',
+     '    if False:\n        for cau_lenh in TRIGGER_AUDIT_CHI_GHI_THEM:'),
+    ("D48 nhật ký: trợ lý ghi hỏng vẫn trả kết quả", "app/services/agent_service.py",
+     '        logger.exception("[%s] khong ghi duoc nhat ky kiem toan cho %s - khong tra ket qua", nhan, ten_cong_cu)\n'
+     '        return {"error": f"Không thực hiện được \'{ten_cong_cu}\' lúc này."}\n', "        pass\n"),
+    ("D49 nhật ký: bước chuyển của worker không ghi", "app/api/records.py",
+     '    kiem_toan.ghi(db, kiem_toan.WORKER, _HANH_DONG_THEO_DICH[target], "record", record.id,\n'
+     '                  chi_tiet=f"{da_doc}->{target}")\n', ""),
+    ("D50 nhật ký: không ghi IP", "app/services/nhat_ky_kiem_toan.py",
+     "ip=_ip_hien_tai.get(),", "ip=None,"),
 ]
 
 

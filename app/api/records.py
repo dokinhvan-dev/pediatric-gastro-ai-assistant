@@ -18,6 +18,7 @@ from app.api.deps import (
     require_service_token,
 )
 from app.services import bitss, dong_y_nghien_cuu, lam_sach_anh, records_query, uncertainty
+from app.services import nhat_ky_kiem_toan as kiem_toan
 from app.services.authz import da_xoa_mem
 from app.services.records_query import LocKhongHopLe
 
@@ -252,6 +253,8 @@ def upload_stool_observation(
         # Trả 403 ở đây sẽ xác nhận child_id đó có thật, biến endpoint thành công cụ
         # đếm xem hệ thống đang quản lý những hồ sơ nào.
         if child.owner_user_id != principal.id:
+            kiem_toan.ghi_rieng(principal, kiem_toan.TRUY_CAP_BI_TU_CHOI, "child", child.id,
+                                ket_qua=kiem_toan.BI_TU_CHOI, chi_tiet=kiem_toan.TAI_ANH_LEN)
             raise HTTPException(status_code=404, detail=f"Không tìm thấy bệnh nhi có ID: {child_id}")
         if observed_at_dt.date() < child.date_of_birth:
             raise HTTPException(
@@ -292,6 +295,8 @@ def upload_stool_observation(
             if dong_y_nghien_cuu.mac_dinh_con_hieu_luc(chu):
                 dong_y_nghien_cuu.ghi_cho_ca(new_record)
             db.add(new_record)
+            db.flush()
+            kiem_toan.ghi(db, principal, kiem_toan.TAI_ANH_LEN, "record", new_record.id)
             db.commit()
             db.refresh(new_record)
         except Exception:
@@ -388,6 +393,9 @@ def _ca_cua_chinh_chu(db, record_id: int, principal) -> StoolRecord:
     if not record:
         raise khong_thay
     child = db.query(Child).filter(Child.id == record.child_id).first()
+    if child and not da_xoa_mem(child) and child.owner_user_id != principal.id:
+        kiem_toan.ghi_rieng(principal, kiem_toan.TRUY_CAP_BI_TU_CHOI, "record", record.id,
+                            ket_qua=kiem_toan.BI_TU_CHOI, chi_tiet="dong_y_nghien_cuu")
     if not child or da_xoa_mem(child) or child.owner_user_id != principal.id:
         raise khong_thay
     return record
@@ -413,6 +421,8 @@ def dong_y_nghien_cuu_cho_ca(
     with SessionLocal() as db:
         record = _ca_cua_chinh_chu(db, record_id, principal)
         dong_y_nghien_cuu.ghi_cho_ca(record)
+        kiem_toan.ghi(db, principal, kiem_toan.DONG_Y_NGHIEN_CUU_CA, "record", record_id,
+                      chi_tiet=dong_y_nghien_cuu.PHIEN_BAN_THONG_BAO)
         db.commit()
         return {"status": "success", "record_id": record_id, "dong_y_nghien_cuu": True}
 
@@ -428,6 +438,7 @@ def rut_dong_y_nghien_cuu_cho_ca(record_id: int, principal: CurrentUser = Depend
     with SessionLocal() as db:
         record = _ca_cua_chinh_chu(db, record_id, principal)
         da_rut = dong_y_nghien_cuu.rut_cho_ca(record)
+        kiem_toan.ghi(db, principal, kiem_toan.RUT_DONG_Y_NGHIEN_CUU_CA, "record", record_id)
         db.commit()
         return {
             "status": "success",
@@ -472,6 +483,8 @@ def get_record(record_id: int, principal: CurrentUser = Depends(get_current_user
         # thứ tám trong hệ thống, và toàn bộ lý do quy tắc xoá mềm nằm trong authz chứ
         # không rải ở từng truy vấn là để một endpoint mới như thế này không thể quên nó.
         assert_can_view_record(db, record, principal)
+        kiem_toan.ghi(db, principal, kiem_toan.XEM_CA, "record", record.id)
+        db.commit()
 
         child = db.query(Child).filter(Child.id == record.child_id).first()
         data = records_query.tom_tat_record(record, ten_be=child.name if child else None)
@@ -536,6 +549,8 @@ def get_record_image(record_id: int, principal: CurrentUser = Depends(get_curren
         if not record:
             raise HTTPException(status_code=404, detail=f"Không tìm thấy ca phân tích có ID: {record_id}")
         assert_can_view_record(db, record, principal)
+        kiem_toan.ghi(db, principal, kiem_toan.XEM_ANH, "record", record.id)
+        db.commit()
         duong_dan = record.image_path
 
     return _phuc_vu_anh(record_id, duong_dan)
@@ -652,6 +667,8 @@ def worker_lay_anh(record_id: int, _worker: str = Depends(require_service_token)
                 status_code=409,
                 detail=f"Ca đang ở trạng thái '{record.inference_status}', worker không cần đọc ảnh nữa.",
             )
+        kiem_toan.ghi(db, kiem_toan.WORKER, kiem_toan.WORKER_LAY_ANH, "record", record.id)
+        db.commit()
         duong_dan = record.image_path
     return _phuc_vu_anh(record_id, duong_dan)
 
@@ -690,6 +707,15 @@ def _assert_transition(current: str, target: str) -> None:
         )
 
 
+# Bước chuyển trạng thái nào thì ghi hành động nào vào nhật ký kiểm toán.
+_HANH_DONG_THEO_DICH = {
+    "processing": kiem_toan.WORKER_BAT_DAU,
+    "completed": kiem_toan.WORKER_GHI_KET_QUA,
+    "failed": kiem_toan.WORKER_BAO_LOI,
+    "queued": kiem_toan.WORKER_THU_LAI,
+}
+
+
 def _chuyen_trang_thai(db, record: StoolRecord, target: str, gia_tri: dict) -> None:
     """Ghi bước chuyển trạng thái bằng MỘT câu UPDATE có điều kiện (so sánh rồi mới ghi).
 
@@ -716,6 +742,8 @@ def _chuyen_trang_thai(db, record: StoolRecord, target: str, gia_tri: dict) -> N
                 f"(không còn là '{da_doc}'). Hãy đọc lại ca rồi thử lại nếu cần."
             ),
         )
+    kiem_toan.ghi(db, kiem_toan.WORKER, _HANH_DONG_THEO_DICH[target], "record", record.id,
+                  chi_tiet=f"{da_doc}->{target}")
     db.commit()
     db.refresh(record)
 

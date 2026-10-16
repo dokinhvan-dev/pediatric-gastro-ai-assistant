@@ -72,7 +72,7 @@ from google.genai import errors as genai_errors
 from google.genai import types
 from setup_database import SessionLocal, Child, StoolRecord, DoctorReview
 
-from app.services import bitss, dong_y, records_query, yeu_to_lam_sang
+from app.services import bitss, dong_y, nhat_ky_kiem_toan as kiem_toan, records_query, yeu_to_lam_sang
 from app.services.authz import (
     CurrentUser,
     can_view_child,
@@ -1240,13 +1240,35 @@ def _goi_cong_cu(principal, ten_cong_cu: str, args: dict) -> dict:
         logger.warning("[%s] tham so sai cho %s: %s", nhan, ten_cong_cu, sorted(args))
         return {"error": f"Tham số gọi '{ten_cong_cu}' không hợp lệ."}
     try:
-        return ham(**args)
+        ket_qua = ham(**args)
     except Exception:
         # Lỗi thật (database hỏng, v.v.). Ghi đủ vết để truy, nhưng thứ trả về cho model
         # chỉ là một câu chung: chuỗi exception có thể chứa câu SQL hoặc đường dẫn máy chủ,
         # và model sẽ đọc nó rồi nhắc lại cho người dùng.
         logger.exception("[%s] loi khi chay %s", nhan, ten_cong_cu)
         return {"error": f"Không thực hiện được '{ten_cong_cu}' lúc này."}
+
+    # Trợ lý đọc hồ sơ là một lối XEM dữ liệu như GET /records/{id}, nên cũng để lại dấu vết
+    # kiểm toán — bác sĩ hỏi qua chat về một ca phải hiện ra y như khi mở ca đó. Công cụ tự
+    # từ chối (trả "error") thì ghi là bị từ chối. Không ghi được nhật ký thì không đưa kết
+    # quả cho model: một lượt đọc hồ sơ không dấu vết là thứ không được phép xảy ra.
+    if "record_id" in args:
+        loai, doi_tuong = "record", args["record_id"]
+    elif "child_id" in args:
+        loai, doi_tuong = "child", args["child_id"]
+    else:
+        loai, doi_tuong = None, None
+    bi_chan = isinstance(ket_qua, dict) and "error" in ket_qua
+    try:
+        kiem_toan.ghi_rieng(
+            principal, kiem_toan.TRO_LY_DOC_DU_LIEU, loai,
+            doi_tuong if isinstance(doi_tuong, int) else None,
+            ket_qua=kiem_toan.BI_TU_CHOI if bi_chan else kiem_toan.THANH_CONG, chi_tiet=ten_cong_cu,
+        )
+    except Exception:
+        logger.exception("[%s] khong ghi duoc nhat ky kiem toan cho %s - khong tra ket qua", nhan, ten_cong_cu)
+        return {"error": f"Không thực hiện được '{ten_cong_cu}' lúc này."}
+    return ket_qua
 
 
 _TIEU_DE_MD = re.compile(r"^[ \t]*#{1,6}[ \t]+", re.M)

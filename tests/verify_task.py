@@ -7336,6 +7336,232 @@ check(
 )
 
 # =====================================================================
+# 44. NHAT KY KIEM TOAN (audit_log, 2026-10-16)
+# =====================================================================
+# Ai xem ho so/anh nao, ai chot nhan, ai dong y/rut dong y, ai bi tu choi khi thu ID cua nha
+# khac - ghi vao bang chi-ghi-them, chi ma dinh danh, khong PII. Thao tac co ghi: nhat ky cung
+# transaction. Duong doc: khong ghi duoc nhat ky thi khong tra du lieu.
+print("\n--- 44. Nhat ky kiem toan ---")
+from sqlalchemy.exc import DatabaseError as _DbErr44  # noqa: E402
+
+from setup_database import AuditLog as _AuditLog  # noqa: E402
+from app.services import nhat_ky_kiem_toan as _nk  # noqa: E402
+
+_rl14.xoa_het()
+
+
+def _moc44():
+    with SessionLocal() as _db:
+        return _db.query(_AuditLog.id).order_by(_AuditLog.id.desc()).limit(1).scalar() or 0
+
+
+def _sau44(moc):
+    """Cac dong ghi sau moc, dang (nguoi, vai, hanh dong, loai, id doi tuong, ket qua, ip, chi tiet)."""
+    with SessionLocal() as _db:
+        return [(r.actor_user_id, r.actor_role, r.action, r.object_type, r.object_id, r.outcome, r.ip, r.detail)
+                for r in _db.query(_AuditLog).filter(_AuditLog.id > moc).order_by(_AuditLog.id).all()]
+
+
+_ID_A44 = _tao_phu_huynh43("phuhuynh.a44@test.local", "Phu Huynh A44")
+_ID_B44 = _tao_phu_huynh43("phuhuynh.b44@test.local", "Phu Huynh B44")
+_HA44, _HB44 = _the43(_ID_A44, "parent"), _the43(_ID_B44, "parent")
+_P_B44 = _authz.CurrentUser(id=_ID_B44, email="phuhuynh.b44@test.local", full_name="Phu Huynh B44", role="parent")
+
+# (a) Tao ho so be va tai anh: moi thao tac mot dong, cung transaction voi du lieu.
+_m = _moc44()
+_r44be = client.post("/api/v1/children", json={
+    "name": "Be Kiem Toan Hoa", "date_of_birth": "2025-06-01", "feeding_type": "Bu me hoan toan",
+}, headers=_HA44)
+_BE44 = _r44be.json()["data"]["child_id"] if _r44be.status_code == 201 else -1
+_r44ca = client.post("/api/v1/records/upload", files={"file": ("t.jpg", VALID_JPEG, "image/jpeg")},
+                     data={"child_id": str(_BE44)}, headers=_HA44)
+_CA44 = _r44ca.json()["data"]["record_id"] if _r44ca.status_code == 201 else -1
+_d44a = _sau44(_m)
+check(
+    "44a) Tao ho so be / tai anh -> moi thao tac dung mot dong (nguoi lam, doi tuong, ip, thanh cong)",
+    _d44a == [
+        (_ID_A44, "parent", _nk.TAO_HO_SO_BE, "child", _BE44, "success", "testclient", None),
+        (_ID_A44, "parent", _nk.TAI_ANH_LEN, "record", _CA44, "success", "testclient", None),
+    ],
+    f"{_d44a}",
+)
+
+# (b) Worker: moi buoc chuyen trang thai mot dong, vai 'worker', khong user_id.
+_m = _moc44()
+client.post(f"/api/v1/records/{_CA44}/inference-start", headers=WORKER_H)
+send_result(_CA44, 2, 0.95)
+_d44b = _sau44(_m)
+check(
+    "44b) Worker bat dau / ghi ket qua -> hai dong vai worker, chi tiet la buoc chuyen trang thai",
+    _d44b == [
+        (None, "worker", _nk.WORKER_BAT_DAU, "record", _CA44, "success", "testclient", "queued->processing"),
+        (None, "worker", _nk.WORKER_GHI_KET_QUA, "record", _CA44, "success", "testclient", "processing->completed"),
+    ],
+    f"{_d44b}",
+)
+
+# (c) Duong doc: xem ca, xem anh, xem danh sach duyet - ghi ca khi nguoi xem la chu ho so.
+_m = _moc44()
+_r44xem = [client.get(f"/api/v1/records/{_CA44}{d}", headers=h).status_code
+           for d, h in (("", DOCTOR_H), ("/anh", DOCTOR_H), ("/reviews", _HA44))]
+_d44c = _sau44(_m)
+check(
+    "44c) Bac si xem ca va anh, phu huynh xem danh sach duyet -> ba dong dung nguoi va dung hanh dong",
+    _r44xem == [200, 200, 200] and _d44c == [
+        (FIXTURE_DOCTOR_ID, "doctor", _nk.XEM_CA, "record", _CA44, "success", "testclient", None),
+        (FIXTURE_DOCTOR_ID, "doctor", _nk.XEM_ANH, "record", _CA44, "success", "testclient", None),
+        (_ID_A44, "parent", _nk.XEM_DANH_SACH_DUYET, "record", _CA44, "success", "testclient", None),
+    ],
+    f"ma={_r44xem} {_d44c}",
+)
+
+# (d) Bi tu choi: B thu ca/be CO THAT cua A -> 404 nhu cu va mot dong 'denied'; ID khong ton
+#     tai thi khong ghi (khong co doi tuong nao bi dung toi).
+_m = _moc44()
+_r44tc = [
+    client.get(f"/api/v1/records/{_CA44}", headers=_HB44).status_code,
+    client.get(f"/api/v1/records/{_CA44}/anh", headers=_HB44).status_code,
+    client.post(f"/api/v1/records/{_CA44}/dong-y-nghien-cuu", json={"phien_ban": _dynk43.PHIEN_BAN_THONG_BAO},
+                headers=_HB44).status_code,
+    client.post("/api/v1/records/upload", files={"file": ("t.jpg", VALID_JPEG, "image/jpeg")},
+                data={"child_id": str(_BE44)}, headers=_HB44).status_code,
+    client.delete(f"/api/v1/children/{_BE44}", headers=_HB44).status_code,
+    client.get(f"/api/v1/records/{_KHONG_CO43}", headers=_HB44).status_code,
+]
+_d44d = _sau44(_m)
+_tc = (_ID_B44, "parent", _nk.TRUY_CAP_BI_TU_CHOI)
+check(
+    "44d) B thu doi tuong co that cua A (5 lan) -> 5 dong 'denied' dung doi tuong; ID khong ton tai khong ghi",
+    _r44tc == [404] * 6 and _d44d == [
+        _tc + ("record", _CA44, "denied", "testclient", None),
+        _tc + ("record", _CA44, "denied", "testclient", None),
+        _tc + ("record", _CA44, "denied", "testclient", "dong_y_nghien_cuu"),
+        _tc + ("child", _BE44, "denied", "testclient", _nk.TAI_ANH_LEN),
+        _tc + ("child", _BE44, "denied", "testclient", _nk.XOA_HO_SO_BE),
+    ],
+    f"ma={_r44tc} {_d44d}",
+)
+
+# (e) Thao tac co ghi: bac si chot nhan, gia dinh dong y / rut dong y nghien cuu, dong y AI.
+_m = _moc44()
+_r44ghi = [
+    client.post(f"/api/v1/records/{_CA44}/review", json={"decision": "approved", "confirmed_bitss": 2},
+                headers=DOCTOR_H).status_code,
+    client.post(f"/api/v1/records/{_CA44}/dong-y-nghien-cuu", json={"phien_ban": _dynk43.PHIEN_BAN_THONG_BAO},
+                headers=_HA44).status_code,
+    client.delete(f"/api/v1/records/{_CA44}/dong-y-nghien-cuu", headers=_HA44).status_code,
+    client.post("/api/v1/auth/dong-y-ai", json={"phien_ban": _dong_y.PHIEN_BAN_THONG_BAO}, headers=_HA44).status_code,
+    client.delete("/api/v1/auth/dong-y-ai", headers=_HA44).status_code,
+]
+_d44e = [d[:6] + (d[7],) for d in _sau44(_m)]
+check(
+    "44e) Chot nhan (kem quyet dinh), dong y/rut dong y nghien cuu cua ca, dong y/rut dong y AI -> moi viec mot dong",
+    _r44ghi == [200] * 5 and _d44e == [
+        (FIXTURE_DOCTOR_ID, "doctor", _nk.DUYET_CA, "record", _CA44, "success", "approved"),
+        (_ID_A44, "parent", _nk.DONG_Y_NGHIEN_CUU_CA, "record", _CA44, "success", _dynk43.PHIEN_BAN_THONG_BAO),
+        (_ID_A44, "parent", _nk.RUT_DONG_Y_NGHIEN_CUU_CA, "record", _CA44, "success", None),
+        (_ID_A44, "parent", _nk.DONG_Y_AI, "user", _ID_A44, "success", _dong_y.PHIEN_BAN_THONG_BAO),
+        (_ID_A44, "parent", _nk.RUT_DONG_Y_AI, "user", _ID_A44, "success", None),
+    ],
+    f"ma={_r44ghi} {_d44e}",
+)
+
+# (f) Dang nhap: thanh cong, sai mat khau (doi tuong la tai khoan bi thu, nguoi lam la an
+#     danh), email khong ton tai (khong doi tuong). Dang xuat.
+_m = _moc44()
+_r44dn = [
+    client.post("/api/v1/auth/login", json={"email": "phuhuynh.a44@test.local", "password": "matkhau-ma-tran-43"}),
+    client.post("/api/v1/auth/login", json={"email": "phuhuynh.a44@test.local", "password": "sai-mat-khau-44"}),
+    client.post("/api/v1/auth/login", json={"email": "khong.ai.ca.44@test.local", "password": "sai-mat-khau-44"}),
+]
+_r44dx = client.post("/api/v1/auth/logout", headers=bearer(_r44dn[0].json().get("access_token", "")))
+_d44f = [d[:6] for d in _sau44(_m)]
+check(
+    "44f) Dang nhap dung / sai mat khau / email la va dang xuat -> dung bon dong, sai thi 'denied'",
+    [r.status_code for r in _r44dn] == [200, 401, 401] and _r44dx.status_code == 200 and _d44f == [
+        (_ID_A44, "parent", _nk.DANG_NHAP, "user", _ID_A44, "success"),
+        (None, "anon", _nk.DANG_NHAP_THAT_BAI, "user", _ID_A44, "denied"),
+        (None, "anon", _nk.DANG_NHAP_THAT_BAI, None, None, "denied"),
+        (_ID_A44, "parent", _nk.DANG_XUAT, "user", _ID_A44, "success"),
+    ],
+    f"ma={[r.status_code for r in _r44dn]}/{_r44dx.status_code} {_d44f}",
+)
+
+# (g) Tro ly doc ho so la mot loi xem: bac si doc ca -> 'success' kem ten cong cu; phu huynh B
+#     (da dong y AI) hoi ca cua A -> cong cu tu choi va nhat ky ghi 'denied'.
+# Gia dinh A vua rut dong y AI o (e): tro ly khong doc ca cua A cho bat ky ai, ke ca bac si.
+# Dong y lai truoc, roi moi kiem.
+client.post("/api/v1/auth/dong-y-ai", json={"phien_ban": _dong_y.PHIEN_BAN_THONG_BAO}, headers=_HA44)
+client.post("/api/v1/auth/dong-y-ai", json={"phien_ban": _dong_y.PHIEN_BAN_THONG_BAO}, headers=_HB44)
+_m = _moc44()
+_kq44g1 = agent_service._goi_cong_cu(P_DOCTOR, "tra_cuu_ket_qua_ai_phan", {"record_id": _CA44})
+_kq44g2 = agent_service._goi_cong_cu(_P_B44, "tra_cuu_ket_qua_ai_phan", {"record_id": _CA44})
+_d44g = [d[:6] + (d[7],) for d in _sau44(_m)]
+check(
+    "44g) Tro ly doc ca: bac si -> 'success' kem ten cong cu; B hoi ca cua A -> 'denied'",
+    "error" not in _kq44g1 and "error" in _kq44g2 and _d44g == [
+        (FIXTURE_DOCTOR_ID, "doctor", _nk.TRO_LY_DOC_DU_LIEU, "record", _CA44, "success", "tra_cuu_ket_qua_ai_phan"),
+        (_ID_B44, "parent", _nk.TRO_LY_DOC_DU_LIEU, "record", _CA44, "denied", "tra_cuu_ket_qua_ai_phan"),
+    ],
+    f"kq1_loi={'error' in _kq44g1} kq2_loi={'error' in _kq44g2} {_d44g}",
+)
+
+
+# (h) Khong ghi duoc nhat ky thi KHONG tra du lieu: ca HTTP lan tro ly.
+def _ghi_hong44(*a, **k):
+    raise RuntimeError("database nhat ky bi khoa (gia lap)")
+
+
+_luu_ghi44, _luu_ghi_rieng44 = _nk.ghi, _nk.ghi_rieng
+_nk.ghi = _ghi_hong44
+try:
+    try:
+        _r44h = client.get(f"/api/v1/records/{_CA44}", headers=DOCTOR_H)
+        _lo44h = _r44h.status_code == 200 or "Be Kiem Toan Hoa" in _r44h.text
+    except RuntimeError:
+        _lo44h = False          # TestClient nem lai exception cua endpoint: khong co du lieu nao ra
+finally:
+    _nk.ghi = _luu_ghi44
+_nk.ghi_rieng = _ghi_hong44
+try:
+    _kq44h = agent_service._goi_cong_cu(P_DOCTOR, "tra_cuu_ket_qua_ai_phan", {"record_id": _CA44})
+finally:
+    _nk.ghi_rieng = _luu_ghi_rieng44
+check(
+    "44h) Ghi nhat ky hong -> GET ca khong tra du lieu; cong cu tro ly tra loi chung, khong tra ket qua",
+    not _lo44h and set(_kq44h) == {"error"},
+    f"lo_http={_lo44h} tro_ly={_kq44h}",
+)
+
+# (i) Chi ghi them: UPDATE va DELETE tren audit_log bi chinh database tu choi.
+_loi44i = []
+for _cau44 in ("UPDATE audit_log SET action = 'sua' WHERE id = (SELECT max(id) FROM audit_log)",
+               "DELETE FROM audit_log WHERE id = (SELECT max(id) FROM audit_log)"):
+    with SessionLocal() as _db44:
+        try:
+            _db44.execute(_sqltext(_cau44))
+            _db44.commit()
+            _loi44i.append(None)
+        except _DbErr44 as _e44:
+            _db44.rollback()
+            _loi44i.append("chi duoc ghi them" in str(_e44))
+check(
+    "44i) audit_log chi ghi them: UPDATE va DELETE deu bi trigger cua database chan",
+    _loi44i == [True, True],
+    f"{_loi44i}",
+)
+
+# (j) Khong PII: khong dong nao chua email, ten nguoi, ten be hay chu '@'.
+with SessionLocal() as _db44:
+    _chu44 = " ".join(" ".join(str(v) for v in (r.action, r.object_type, r.ip, r.detail) if v)
+                      for r in _db44.query(_AuditLog).all())
+check(
+    "44j) Toan bo audit_log khong chua email, ten phu huynh hay ten be",
+    "@" not in _chu44 and "Phu Huynh" not in _chu44 and "Kiem Toan Hoa" not in _chu44 and "Fixture" not in _chu44,
+    _chu44[:200],
+)
+
+# =====================================================================
 print("\n--- TONG KET ---")
 failed = [r for r in results if r[1] == "FAIL"]
 for name, status, detail in results:

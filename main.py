@@ -9,6 +9,7 @@ from app.api.chat import router as chat_router
 from app.api.children import router as children_router
 from app.api.records import router as records_router
 from app.api.doctor import router as doctor_router
+from app.services import nhat_ky_kiem_toan
 
 # Origin được phép gọi API khi KHÔNG cấu hình gì. Cố ý là máy của lập trình viên chứ
 # không phải "*": thiếu cấu hình thì đóng cửa, giống nguyên tắc đã áp cho
@@ -117,7 +118,13 @@ HEADER_BAO_MAT_API = {
 
 
 async def gan_header_bao_mat(request, call_next):
-    response = await call_next(request)
+    # IP cho nhật ký kiểm toán. request.client đã là IP thật của khách khi uvicorn tin proxy
+    # (FORWARDED_ALLOW_IPS) — cùng nguồn mà hạn mức gọi dùng.
+    moc = nhat_ky_kiem_toan.dat_ip(request.client.host if request.client else None)
+    try:
+        response = await call_next(request)
+    finally:
+        nhat_ky_kiem_toan.bo_ip(moc)
     # setdefault: endpoint đã tự đặt header (vd. ảnh dùng "private, no-store") thì giữ nguyên.
     for ten, gia_tri in HEADER_BAO_MAT.items():
         response.headers.setdefault(ten, gia_tri)
