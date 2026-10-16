@@ -19,7 +19,7 @@ from contextvars import ContextVar
 from typing import Optional
 
 from setup_database import AuditLog, SessionLocal
-from app.services.authz import CurrentUser
+from app.services.authz import CurrentUser, WorkerDanhTinh
 
 # Mã hành động. Hằng số thay vì chuỗi rải rác: truy vấn nhật ký dựa vào đúng các mã này.
 DANG_KY = "dang_ky"
@@ -45,6 +45,8 @@ WORKER_BAT_DAU = "worker_bat_dau"
 WORKER_GHI_KET_QUA = "worker_ghi_ket_qua"
 WORKER_BAO_LOI = "worker_bao_loi"
 WORKER_THU_LAI = "worker_thu_lai"
+CAP_TOKEN_WORKER = "cap_token_worker"  # noqa: S105 - mã hành động, không phải bí mật
+THU_HOI_TOKEN_WORKER = "thu_hoi_token_worker"  # noqa: S105 - mã hành động, không phải bí mật
 # Đã đăng nhập, đối tượng CÓ tồn tại, nhưng không được phép: dấu hiệu dò ID (BOLA).
 TRUY_CAP_BI_TU_CHOI = "truy_cap_bi_tu_choi"
 
@@ -53,8 +55,9 @@ BI_TU_CHOI = "denied"
 
 VAI_AN_DANH = "anon"
 VAI_WORKER = "worker"
-# Đánh dấu worker suy luận: không phải người, không có user_id.
-WORKER = object()
+VAI_VAN_HANH = "van_hanh"
+# Người vận hành chạy script trên máy chủ (cấp/thu hồi token worker): không đăng nhập qua API.
+VAN_HANH = object()
 
 # IP của request đang phục vụ. Middleware trong main.py đặt giá trị; contextvar đi theo
 # request kể cả khi endpoint đồng bộ chạy trong threadpool.
@@ -70,18 +73,21 @@ def bo_ip(moc) -> None:
 
 
 def _nguoi_lam(principal) -> tuple:
-    if principal is WORKER:
-        return None, VAI_WORKER
+    """(user_id, vai, worker_id) của người làm."""
+    if isinstance(principal, WorkerDanhTinh):
+        return None, VAI_WORKER, principal.id
+    if principal is VAN_HANH:
+        return None, VAI_VAN_HANH, None
     if isinstance(principal, CurrentUser):
-        return principal.id, principal.role
-    return None, VAI_AN_DANH
+        return principal.id, principal.role, None
+    return None, VAI_AN_DANH, None
 
 
 def _dong(principal, hanh_dong: str, loai: Optional[str], doi_tuong_id: Optional[int],
           ket_qua: str, chi_tiet: Optional[str]) -> AuditLog:
-    uid, vai = _nguoi_lam(principal)
+    uid, vai, wid = _nguoi_lam(principal)
     return AuditLog(
-        actor_user_id=uid, actor_role=vai, action=hanh_dong, object_type=loai,
+        actor_user_id=uid, actor_worker_id=wid, actor_role=vai, action=hanh_dong, object_type=loai,
         object_id=doi_tuong_id, outcome=ket_qua, ip=_ip_hien_tai.get(),
         detail=(chi_tiet or None) and str(chi_tiet)[:100],
     )

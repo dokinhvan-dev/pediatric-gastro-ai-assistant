@@ -7,7 +7,7 @@ sửa. Với mỗi đột biến, script chạy lại toàn bộ bộ kiểm tra
 thêm ít nhất một kiểm tra so với bản sao chưa đột biến, hoặc làm bộ kiểm tra dừng giữa chừng. Không gọi Gemini
 (bộ kiểm tra tự đặt khoá API rỗng), không đụng data/ thật.
 
-Danh sách gồm 53 đột biến: D01–D19 dựng ngày 2026-10-01, rải trên các thành phần chính, gồm bốn đột biến nhắm
+Danh sách gồm 59 đột biến: D01–D19 dựng ngày 2026-10-01, rải trên các thành phần chính, gồm bốn đột biến nhắm
 thẳng vào bất biến B1–B4; D20–D25 dựng ngày 2026-10-05, mỗi đột biến đảo ngược một bản sửa lỗi sau đợt đo;
 D26 dựng ngày 2026-10-08 cho bản sửa ghi chú JPEG còn sót sau bước làm sạch ảnh; D27–D30 dựng ngày 2026-10-10
 cho phần nối mô hình ảnh (quy đổi nhãn 7 loại sang 4 nhóm, hàng chờ và ảnh cho worker); D31–D33 dựng ngày
@@ -15,7 +15,8 @@ cho phần nối mô hình ảnh (quy đổi nhãn 7 loại sang 4 nhóm, hàng 
 tăng cường bảo mật 1 (log nhánh lỗi của chat, tắt tài liệu API, header bảo mật, timeout Gemini); D38–D46, mỗi
 đột biến gỡ một chốt phân quyền theo đối tượng mà ma trận route × vai (mục 44) phải bắt; D47–D53 cho nhật ký
 kiểm toán (mục 45): bỏ ghi ở từng loại sự kiện, bỏ trigger chỉ-ghi-thêm, trợ lý vẫn trả dữ liệu khi không ghi
-được nhật ký, không ghi IP.
+được nhật ký, không ghi IP; D54–D59 cho token dịch vụ riêng từng worker (mục 46). D07 và D15 giữ nguyên ý nghĩa
+nhưng nay nhắm vào verify_service_token mới (so băm bí mật của token worker thay cho bí mật dùng chung).
 D07 và D12 là đột biến tương đương (không đổi hành vi quan sát được), nên không kiểm tra chức năng nào bắt
 được chúng; chúng được giữ lại để thấy giới hạn của phương pháp.
 """
@@ -46,7 +47,8 @@ DOT_BIEN = [
     ("D06 cửa sổ trượt: ghi cả lượt bị từ chối", "app/services/rate_limit.py",
      "            cho = moc[0] + cua_so - bay_gio", "            moc.append(bay_gio)\n            cho = moc[0] + cua_so - bay_gio"),
     ("D07 so sánh token: compare_digest thành == (tương đương)", "app/services/security.py",
-     "return hmac.compare_digest(presented, expected)", "return presented == expected"),
+     "hmac.compare_digest(bam_bi_mat_worker(bi_mat), dong.token_hash)",
+     "bam_bi_mat_worker(bi_mat) == dong.token_hash"),
     ("D08 thử lại mọi ClientError", "app/services/agent_service.py",
      "        return exc.code == 429", "        return True"),
     ("D09 giờ mở lại hạn mức ngày: +1 ngày thành +2", "app/services/agent_service.py",
@@ -63,7 +65,8 @@ DOT_BIEN = [
      "cua_so_dai_nhat = max((c for _, _, c in HAN_MUC.values()), default=CUA_SO_MAC_DINH)",
      "cua_so_dai_nhat = min((c for _, _, c in HAN_MUC.values()), default=CUA_SO_MAC_DINH)"),
     ("D15 token dịch vụ: bỏ kiểm 'không có token'", "app/services/security.py",
-     "    if not presented:\n        return False\n    return hmac.compare_digest", "    return hmac.compare_digest"),
+     "    if not presented:\n        return None\n    phan = tach_token_worker(presented)",
+     "    phan = tach_token_worker(presented)"),
     ("D16 B1: phụ huynh xem được hồ sơ mọi bé", "app/services/authz.py",
      "return child.owner_user_id == principal.id", "return True"),
     ("D17 B2: bộ lọc nhãn không căn cứ luôn rỗng", "app/services/agent_service.py",
@@ -147,10 +150,23 @@ DOT_BIEN = [
      '        logger.exception("[%s] khong ghi duoc nhat ky kiem toan cho %s - khong tra ket qua", nhan, ten_cong_cu)\n'
      '        return {"error": f"Không thực hiện được \'{ten_cong_cu}\' lúc này."}\n', "        pass\n"),
     ("D52 nhật ký: bước chuyển của worker không ghi", "app/api/records.py",
-     '    kiem_toan.ghi(db, kiem_toan.WORKER, _HANH_DONG_THEO_DICH[target], "record", record.id,\n'
+     '    kiem_toan.ghi(db, worker, _HANH_DONG_THEO_DICH[target], "record", record.id,\n'
      '                  chi_tiet=f"{da_doc}->{target}")\n', ""),
     ("D53 nhật ký: không ghi IP", "app/services/nhat_ky_kiem_toan.py",
      "ip=_ip_hien_tai.get(),", "ip=None,"),
+    ("D54 token worker: bỏ kiểm hạn dùng", "app/services/security.py",
+     "    if dong.expires_at <= datetime.now(timezone.utc).replace(tzinfo=None):\n        return None\n", ""),
+    ("D55 token worker: bỏ kiểm thu hồi", "app/services/security.py",
+     "    if dong.revoked_at is not None:\n        return None\n", ""),
+    ("D56 token worker: đúng id là đủ, không so bí mật", "app/services/security.py",
+     "    if not hmac.compare_digest(bam_bi_mat_worker(bi_mat), dong.token_hash):\n        return None\n", ""),
+    ("D57 nhật ký: không ghi worker_id", "app/services/nhat_ky_kiem_toan.py",
+     "return None, VAI_WORKER, principal.id", "return None, VAI_WORKER, None"),
+    ("D58 token worker: bỏ trần hạn dùng 365 ngày", "app/services/token_worker.py",
+     "if not 1 <= so_ngay <= SO_NGAY_TOI_DA:", "if not 1 <= so_ngay:"),
+    ("D59 token worker: thu hồi không ghi nhật ký", "app/services/token_worker.py",
+     '    kiem_toan.ghi(db, kiem_toan.VAN_HANH, kiem_toan.THU_HOI_TOKEN_WORKER, "worker_token", dong.id,\n'
+     "                  chi_tiet=dong.ten)\n", ""),
 ]
 
 

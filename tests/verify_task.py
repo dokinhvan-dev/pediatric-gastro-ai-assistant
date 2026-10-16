@@ -228,7 +228,11 @@ DOCTOR_TOKEN = login("bacsi.fixture@test.local", FIXTURE_DOCTOR_PASSWORD)
 PARENT_H = bearer(PARENT_TOKEN)
 DOCTOR_H = bearer(DOCTOR_TOKEN)
 # Worker suy luan dung header rieng, KHONG phai Bearer token cua nguoi dung.
-WORKER_H = {"X-Service-Token": os.environ["INFERENCE_SERVICE_TOKEN"]}
+from app.services import token_worker as _token_worker  # noqa: E402
+with SessionLocal() as _db_wk:
+    _TOKEN_WORKER_TEST, _ = _token_worker.cap(_db_wk, "worker-test")
+    _db_wk.commit()
+WORKER_H = {"X-Service-Token": _TOKEN_WORKER_TEST}
 
 # --- Principal dung cho test tang agent ---------------------------------------
 # Tool cua agent nhan principal truc tiep chu khong qua HTTP, nen test dung thang
@@ -1434,11 +1438,12 @@ check(
 )
 
 # --- Thieu cau hinh service token phai la DONG CUA, khong phai mo toang ---
+_db_11ab = SessionLocal()
 _luu = os.environ["INFERENCE_SERVICE_TOKEN"]
 os.environ["INFERENCE_SERVICE_TOKEN"] = ""
 check(
     "11ab) Chua cau hinh INFERENCE_SERVICE_TOKEN -> cam tat ca, khong phai cho tat ca",
-    sec.verify_service_token("") is False and sec.verify_service_token("bat-ky") is False,
+    all(sec.verify_service_token(t, _db_11ab) is None for t in ("", "bat-ky", os.environ["INFERENCE_SERVICE_TOKEN"])),
 )
 os.environ["INFERENCE_SERVICE_TOKEN"] = _luu
 
@@ -6690,7 +6695,7 @@ with SessionLocal() as _db_a:
     _r_b = client.post(f"/api/v1/records/{_id40}/inference-result", headers=WORKER_H,
                        json={"ai_predicted_class": 2, "ai_confidence": 0.95})   # B ghi xong
     try:
-        _rec40._chuyen_trang_thai(_db_a, _ban_cu, "completed",
+        _rec40._chuyen_trang_thai(_db_a, _authz.WorkerDanhTinh(id=0, ten="gia-lap"), _ban_cu, "completed",
                                   {"ai_predicted_class": 4, "ai_confidence": 0.99,
                                    "is_uncertain": False, "review_status": "pending"})
     except _HTTPException40 as _loi40:
@@ -7672,6 +7677,170 @@ check(
     "45j) Toan bo audit_log khong chua email, ten phu huynh hay ten be",
     "@" not in _chu45 and "Phu Huynh" not in _chu45 and "Kiem Toan Hoa" not in _chu45 and "Fixture" not in _chu45,
     _chu45[:200],
+)
+
+# =====================================================================
+# 46. TOKEN DICH VU RIENG CHO TUNG WORKER (2026-10-16)
+# =====================================================================
+# Thay bi mat dung chung INFERENCE_SERVICE_TOKEN bang token rieng moi worker (bang worker_tokens):
+# co han, thu hoi duoc ngay, nhat ky kiem toan ghi dung worker nao (actor_worker_id). Database
+# chi giu SHA-256 cua phan bi mat.
+print("\n--- 46. Token dich vu rieng cho tung worker ---")
+import contextlib as _ctx46  # noqa: E402
+import io as _io46  # noqa: E402
+
+import scripts.token_worker as _cli46  # noqa: E402
+from setup_database import WorkerToken as _WorkerToken  # noqa: E402
+
+
+def _cap46(ten, so_ngay=90):
+    with SessionLocal() as _db:
+        _tk, _d = _token_worker.cap(_db, ten, so_ngay)
+        _db.commit()
+        return _tk, _d.id
+
+
+def _hang_cho46(token):
+    return client.get("/api/v1/records/worker/hang-cho", headers={"X-Service-Token": token}).status_code
+
+
+def _dong_wk46(moc):
+    with SessionLocal() as _db:
+        return [(r.actor_worker_id, r.actor_role, r.action, r.object_type, r.object_id, r.detail)
+                for r in _db.query(_AuditLog).filter(_AuditLog.id > moc).order_by(_AuditLog.id).all()]
+
+
+# (a) Cap: dang wk_<id>_<bi mat>; database chi co SHA-256 cua bi mat; han dung dung so ngay;
+#     lan cap vao nhat ky kiem toan voi vai 'van_hanh'.
+_m = _moc45()
+_TK46A, _ID46A = _cap46("gpu-46a")
+with SessionLocal() as _db46:
+    _dong46a = _db46.get(_WorkerToken, _ID46A)
+    _hash46a, _han46a = _dong46a.token_hash, _dong46a.expires_at
+_bi_mat46a = _TK46A.split("_", 2)[2]
+_con46a = (_han46a - datetime.now(timezone.utc).replace(tzinfo=None)).total_seconds() / 86400
+check(
+    "46a) Cap token: dang wk_<id>_<bi mat>, DB chi giu SHA-256 (khong co token/bi mat), han 90 ngay, "
+    "ghi nhat ky vai van_hanh",
+    _TK46A.startswith(f"wk_{_ID46A}_") and len(_bi_mat46a) >= 40
+    and _hash46a == _security.bam_bi_mat_worker(_bi_mat46a) and _bi_mat46a not in _hash46a
+    and 89.9 < _con46a <= 90.0
+    and _dong_wk46(_m) == [(None, "van_hanh", _nk.CAP_TOKEN_WORKER, "worker_token", _ID46A, "gpu-46a/90d")],
+    f"tk={_TK46A[:12]}... con={_con46a:.3f} nk={_dong_wk46(_m)}",
+)
+
+# (b) Hai worker, hai token: ca hai dung duoc; nhat ky ghi dung worker nao lam buoc nao.
+_TK46B, _ID46B = _cap46("gpu-46b")
+_ca46 = new_queued_record()
+_m = _moc45()
+_r46b = [
+    _hang_cho46(_TK46A), _hang_cho46(_TK46B),
+    client.post(f"/api/v1/records/{_ca46}/inference-start", headers={"X-Service-Token": _TK46A}).status_code,
+    client.post(f"/api/v1/records/{_ca46}/inference-result", json={"ai_predicted_class": 2, "ai_confidence": 0.95},
+                headers={"X-Service-Token": _TK46B}).status_code,
+]
+check(
+    "46b) Hai worker dung token rieng: ca hai qua; nhat ky ghi actor_worker_id dung may cho tung buoc",
+    _r46b == [200, 200, 200, 200] and _dong_wk46(_m) == [
+        (_ID46A, "worker", _nk.WORKER_BAT_DAU, "record", _ca46, "queued->processing"),
+        (_ID46B, "worker", _nk.WORKER_GHI_KET_QUA, "record", _ca46, "processing->completed"),
+    ],
+    f"ma={_r46b} nk={_dong_wk46(_m)}",
+)
+
+# (c) Thu hoi A: request ke tiep cua A bi 401 ngay, B van chay; thu hoi lan hai tra False;
+#     lan thu hoi vao nhat ky.
+_m = _moc45()
+with SessionLocal() as _db46:
+    _thu46 = _token_worker.thu_hoi(_db46, _ID46A)
+    _db46.commit()
+with SessionLocal() as _db46:
+    _thu46_lai = _token_worker.thu_hoi(_db46, _ID46A)
+    _db46.commit()
+check(
+    "46c) Thu hoi token A -> A bi 401 tu request ke tiep, B van 200; thu hoi lan hai False; ghi nhat ky",
+    _thu46 is True and _thu46_lai is False and _hang_cho46(_TK46A) == 401 and _hang_cho46(_TK46B) == 200
+    and _dong_wk46(_m) == [(None, "van_hanh", _nk.THU_HOI_TOKEN_WORKER, "worker_token", _ID46A, "gpu-46a")],
+    f"thu={_thu46}/{_thu46_lai} A={_hang_cho46(_TK46A)} B={_hang_cho46(_TK46B)} nk={_dong_wk46(_m)}",
+)
+
+# (d) Het han: token qua expires_at bi 401 nhu token sai (khong noi la tung hop le).
+_TK46C, _ID46C = _cap46("gpu-46c", 1)
+_truoc46d = _hang_cho46(_TK46C)
+with SessionLocal() as _db46:
+    _db46.execute(_sqltext("UPDATE worker_tokens SET expires_at = :t WHERE id = :i"),
+                  {"t": datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(seconds=1), "i": _ID46C})
+    _db46.commit()
+_r46d = client.get("/api/v1/records/worker/hang-cho", headers={"X-Service-Token": _TK46C})
+_r46sai = client.get("/api/v1/records/worker/hang-cho", headers={"X-Service-Token": "wk_1_sai"})
+check(
+    "46d) Token qua han -> 401, cung thong bao voi token sai",
+    _truoc46d == 200 and _r46d.status_code == 401 and _r46d.json() == _r46sai.json(),
+    f"truoc={_truoc46d} sau={_r46d.status_code}",
+)
+
+# (e) Gia mao: dung id sai bi mat, sai id dung bi mat, sai dang, token nguoi dung, bi mat dung
+#     chung cu trong bien moi truong, rong -> deu 401.
+_gia46 = [
+    f"wk_{_ID46B}_{_bi_mat46a}",
+    f"wk_{_ID46B + 1000}_{_TK46B.split('_', 2)[2]}",
+    "wk_abc_" + _TK46B.split("_", 2)[2],
+    _TK46B.replace("wk_", "xx_", 1),
+    PARENT_TOKEN,
+    os.environ["INFERENCE_SERVICE_TOKEN"],
+    "",
+]
+_r46e = [_hang_cho46(t) for t in _gia46]
+check(
+    "46e) Token gia mao (sai bi mat, sai id, sai dang, JWT nguoi dung, bi mat dung chung cu, rong) -> 401",
+    _r46e == [401] * len(_gia46),
+    f"{_r46e}",
+)
+
+# (f) Dau vao khi cap: ten sai dang, han ngoai 1..365 -> tu choi, khong tao dong nao.
+with SessionLocal() as _db46:
+    _truoc46f = _db46.query(_WorkerToken).count()
+_loi46f = []
+for _ten46, _ngay46 in (("", 30), ("GPU 01", 30), ("gpu-46f", 0), ("gpu-46f", 366)):
+    with SessionLocal() as _db46:
+        try:
+            _token_worker.cap(_db46, _ten46, _ngay46)
+            _db46.commit()
+            _loi46f.append(False)
+        except ValueError:
+            _db46.rollback()
+            _loi46f.append(True)
+with SessionLocal() as _db46:
+    _sau46f = _db46.query(_WorkerToken).count()
+check(
+    "46f) Cap voi ten rong/co dau cach, han 0 hoac 366 ngay -> ValueError, khong them dong nao",
+    _loi46f == [True] * 4 and _sau46f == _truoc46f,
+    f"loi={_loi46f} so_dong={_truoc46f}->{_sau46f}",
+)
+
+
+# (g) Script van hanh: cap in token dung duoc; thu-hoi lam token chet; liet-ke khong bao gio in bi mat.
+def _chay_cli46(argv):
+    _ra = _io46.StringIO()
+    with _ctx46.redirect_stdout(_ra), _ctx46.redirect_stderr(_io46.StringIO()):
+        _ma = _cli46.main(argv)
+    return _ma, _ra.getvalue()
+
+
+_ma46g1, _ra46g1 = _chay_cli46(["cap", "--ten", "cli-46g", "--so-ngay", "7"])
+_tk46g = next((d.strip() for d in _ra46g1.splitlines() if d.strip().startswith("wk_")), "")
+_id46g = int(_tk46g.split("_")[1]) if _tk46g else -1
+_dung46g = _hang_cho46(_tk46g)
+_ma46g2, _ = _chay_cli46(["thu-hoi", "--id", str(_id46g)])
+_ma46g3, _ra46g3 = _chay_cli46(["liet-ke"])
+_ma46g4, _ = _chay_cli46(["cap", "--ten", "Sai Ten"])
+check(
+    "46g) scripts/token_worker.py: cap in token dung duoc, thu-hoi lam token bi 401, liet-ke khong in bi mat, "
+    "ten sai -> ma loi 1",
+    _ma46g1 == 0 and _dung46g == 200 and _ma46g2 == 0 and _hang_cho46(_tk46g) == 401
+    and _ma46g3 == 0 and "cli-46g" in _ra46g3 and "da_thu_hoi" in _ra46g3
+    and _tk46g.split("_", 2)[2] not in _ra46g3 and _bi_mat46a not in _ra46g3 and _ma46g4 == 1,
+    f"ma={(_ma46g1, _ma46g2, _ma46g3, _ma46g4)} dung={_dung46g}",
 )
 
 # =====================================================================

@@ -19,7 +19,7 @@ from app.api.deps import (
 )
 from app.services import bitss, dong_y_nghien_cuu, lam_sach_anh, records_query, uncertainty
 from app.services import nhat_ky_kiem_toan as kiem_toan
-from app.services.authz import da_xoa_mem
+from app.services.authz import WorkerDanhTinh, da_xoa_mem
 from app.services.records_query import LocKhongHopLe
 
 router = APIRouter(prefix="/api/v1/records", tags=["Stool Records"])
@@ -631,7 +631,7 @@ TRANG_THAI_WORKER_DOC_ANH = {"queued", "processing"}
 @router.get("/worker/hang-cho")
 def worker_hang_cho(
         limit: int = Query(10, ge=1, le=SO_CA_HANG_CHO_TOI_DA),
-        _worker: str = Depends(require_service_token),
+        worker: WorkerDanhTinh = Depends(require_service_token),
 ):
     """Danh sách ca đang chờ suy luận, cũ nhất trước, để worker lấy việc.
 
@@ -655,7 +655,7 @@ def worker_hang_cho(
 
 
 @router.get("/{record_id}/worker/anh")
-def worker_lay_anh(record_id: int, _worker: str = Depends(require_service_token)):
+def worker_lay_anh(record_id: int, worker: WorkerDanhTinh = Depends(require_service_token)):
     """Ảnh của một ca, cho worker suy luận. Chỉ mở khi ca đang queued hoặc processing."""
     with SessionLocal() as db:
         record = _get_record_or_404(db, record_id)
@@ -667,7 +667,7 @@ def worker_lay_anh(record_id: int, _worker: str = Depends(require_service_token)
                 status_code=409,
                 detail=f"Ca đang ở trạng thái '{record.inference_status}', worker không cần đọc ảnh nữa.",
             )
-        kiem_toan.ghi(db, kiem_toan.WORKER, kiem_toan.WORKER_LAY_ANH, "record", record.id)
+        kiem_toan.ghi(db, worker, kiem_toan.WORKER_LAY_ANH, "record", record.id)
         db.commit()
         duong_dan = record.image_path
     return _phuc_vu_anh(record_id, duong_dan)
@@ -716,7 +716,7 @@ _HANH_DONG_THEO_DICH = {
 }
 
 
-def _chuyen_trang_thai(db, record: StoolRecord, target: str, gia_tri: dict) -> None:
+def _chuyen_trang_thai(db, worker: WorkerDanhTinh, record: StoolRecord, target: str, gia_tri: dict) -> None:
     """Ghi bước chuyển trạng thái bằng MỘT câu UPDATE có điều kiện (so sánh rồi mới ghi).
 
     Kiểm _assert_transition rồi mới gán thuộc tính là hai bước tách rời: hai worker gửi kết
@@ -742,7 +742,7 @@ def _chuyen_trang_thai(db, record: StoolRecord, target: str, gia_tri: dict) -> N
                 f"(không còn là '{da_doc}'). Hãy đọc lại ca rồi thử lại nếu cần."
             ),
         )
-    kiem_toan.ghi(db, kiem_toan.WORKER, _HANH_DONG_THEO_DICH[target], "record", record.id,
+    kiem_toan.ghi(db, worker, _HANH_DONG_THEO_DICH[target], "record", record.id,
                   chi_tiet=f"{da_doc}->{target}")
     db.commit()
     db.refresh(record)
@@ -768,7 +768,7 @@ class InferenceFailureIn(BaseModel):
 def submit_inference_result(
         record_id: int,
         payload: InferenceResultIn,
-        _worker: str = Depends(require_service_token),
+        worker: WorkerDanhTinh = Depends(require_service_token),
 ):
     """Điểm nối để worker/script suy luận ghi kết quả của mô hình vào hệ thống.
 
@@ -804,7 +804,7 @@ def submit_inference_result(
         gating = uncertainty.evaluate(payload.ai_confidence)
 
         try:
-            _chuyen_trang_thai(db, record, "completed", {
+            _chuyen_trang_thai(db, worker, record, "completed", {
                 "ai_predicted_class": payload.ai_predicted_class,
                 "ai_confidence": payload.ai_confidence,
                 "is_uncertain": gating["is_uncertain"],
@@ -837,7 +837,7 @@ def submit_inference_result(
 
 
 @router.post("/{record_id}/inference-start")
-def mark_inference_started(record_id: int, _worker: str = Depends(require_service_token)):
+def mark_inference_started(record_id: int, worker: WorkerDanhTinh = Depends(require_service_token)):
     """Worker báo đã nhận ca và bắt đầu chạy mô hình: queued -> processing.
 
     Có bước này thì mới phân biệt được 'ca chưa ai đụng tới' và 'ca đang chạy dở'.
@@ -849,7 +849,7 @@ def mark_inference_started(record_id: int, _worker: str = Depends(require_servic
         _assert_transition(record.inference_status, "processing")
 
         try:
-            _chuyen_trang_thai(db, record, "processing", {})
+            _chuyen_trang_thai(db, worker, record, "processing", {})
         except HTTPException:
             raise
         except Exception:
@@ -867,7 +867,7 @@ def mark_inference_started(record_id: int, _worker: str = Depends(require_servic
 def mark_inference_failed(
         record_id: int,
         payload: InferenceFailureIn,
-        _worker: str = Depends(require_service_token),
+        worker: WorkerDanhTinh = Depends(require_service_token),
 ):
     """Worker báo suy luận thất bại: queued/processing -> failed, kèm lý do.
 
@@ -890,7 +890,7 @@ def mark_inference_failed(
         try:
             # Ca thất bại tuyệt đối không được giữ lại kết quả nửa vời:
             # CHECK constraint chk_inference_status_and_result cũng bắt buộc điều này.
-            _chuyen_trang_thai(db, record, "failed", {
+            _chuyen_trang_thai(db, worker, record, "failed", {
                 "inference_error": reason,
                 "ai_predicted_class": None,
                 "ai_confidence": None,
@@ -914,7 +914,7 @@ def mark_inference_failed(
 
 
 @router.post("/{record_id}/inference-retry")
-def retry_inference(record_id: int, _worker: str = Depends(require_service_token)):
+def retry_inference(record_id: int, worker: WorkerDanhTinh = Depends(require_service_token)):
     """Đưa một ca đã thất bại trở lại hàng chờ: failed -> queued.
 
     Xoá luôn thông báo lỗi cũ. Nếu giữ lại, một ca đang chờ chạy lại sẽ mang theo lỗi
@@ -926,7 +926,7 @@ def retry_inference(record_id: int, _worker: str = Depends(require_service_token
         _assert_transition(record.inference_status, "queued")
 
         try:
-            _chuyen_trang_thai(db, record, "queued", {"inference_error": None})
+            _chuyen_trang_thai(db, worker, record, "queued", {"inference_error": None})
         except HTTPException:
             raise
         except Exception:

@@ -417,6 +417,8 @@ class AuditLog(Base):
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), nullable=False)
     # NULL khi chưa đăng nhập hoặc là worker suy luận; actor_role phân biệt hai trường hợp.
     actor_user_id = Column(Integer, nullable=True)
+    # id trong worker_tokens khi người làm là worker suy luận: biết đúng máy nào ghi kết quả.
+    actor_worker_id = Column(Integer, nullable=True)
     actor_role = Column(String(20), nullable=False)
     action = Column(String(50), nullable=False)
     object_type = Column(String(20), nullable=True)
@@ -431,6 +433,36 @@ class AuditLog(Base):
         # "Ai đã đụng vào hồ sơ này" và "người này đã làm gì" là hai câu hỏi thường gặp nhất.
         Index("ix_audit_object_time", "object_type", "object_id", "created_at"),
         Index("ix_audit_actor_time", "actor_user_id", "created_at"),
+    )
+
+
+class WorkerToken(Base):
+    """Token dịch vụ RIÊNG cho từng worker suy luận, có hạn dùng và thu hồi được.
+
+    Thay cho một bí mật dùng chung trong biến môi trường: lộ bí mật chung là giả được kết quả
+    suy luận của mọi máy, không biết máy nào đã ghi, và đổi nó là dừng cả đàn worker cùng lúc.
+    Mỗi worker một dòng: lộ token nào thì thu hồi đúng token đó, nhật ký kiểm toán ghi được
+    worker nào làm gì (audit_log.actor_worker_id).
+
+    Chỉ lưu SHA-256 của phần bí mật, không lưu token. Bí mật là 32 byte ngẫu nhiên nên băm một
+    lần là đủ (không phải mật khẩu người đặt, không cần bcrypt); đọc trộm database không dùng
+    được token nào. Token đầy đủ chỉ hiện đúng một lần, lúc cấp (scripts/token_worker.py).
+
+    Không chỉ-ghi-thêm như audit_log: thu hồi chính là UPDATE revoked_at. Dòng không bao giờ bị
+    xoá, để id trong nhật ký kiểm toán luôn tra ngược được ra tên worker.
+    """
+    __tablename__ = "worker_tokens"
+
+    id = Column(Integer, primary_key=True)
+    ten = Column(String(50), nullable=False, index=True)
+    token_hash = Column(String(64), nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    revoked_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("length(trim(ten)) > 0", name="chk_worker_token_ten_khong_rong"),
+        CheckConstraint("length(token_hash) = 64", name="chk_worker_token_hash_sha256"),
     )
 
 

@@ -32,6 +32,7 @@ from app.services.authz import (  # noqa: F401
     ROLE_DOCTOR,
     ROLE_PARENT,
     CurrentUser,
+    WorkerDanhTinh,
     can_view_record,
 )
 
@@ -139,19 +140,25 @@ def require_role(*allowed_roles: str):
 require_doctor = require_role(ROLE_DOCTOR)
 
 
-def require_service_token(x_service_token: Optional[str] = Header(default=None)) -> str:
+def require_service_token(x_service_token: Optional[str] = Header(default=None)) -> WorkerDanhTinh:
     """Chặn các điểm nối dành cho worker suy luận.
 
     Đây là ranh giới máy-với-máy, không phải người dùng, nên không dùng Bearer token của
     người. Tách hẳn header ra cũng khiến việc một token người dùng bị đem đi ghi kết quả
     AI trở thành bất khả, chứ không phụ thuộc vào việc nhớ kiểm tra vai trò.
+
+    Mỗi worker một token riêng (setup_database.WorkerToken): trả về danh tính của đúng worker
+    đó để nhật ký kiểm toán ghi được máy nào đã làm gì. Hết hạn hay đã thu hồi thì 401 như
+    token sai — cùng một thông báo, không cho người dò biết token từng có hiệu lực.
     """
-    if not security.verify_service_token(x_service_token):
-        raise HTTPException(
-            status_code=401,
-            detail="Thiếu hoặc sai 'X-Service-Token'. Điểm nối này chỉ dành cho worker suy luận.",
-        )
-    return "inference-worker"
+    with SessionLocal() as db:
+        dong = security.verify_service_token(x_service_token, db)
+        if dong is None:
+            raise HTTPException(
+                status_code=401,
+                detail="Thiếu hoặc sai 'X-Service-Token'. Điểm nối này chỉ dành cho worker suy luận.",
+            )
+        return WorkerDanhTinh(id=dong.id, ten=dong.ten)
 
 
 def get_optional_principal(

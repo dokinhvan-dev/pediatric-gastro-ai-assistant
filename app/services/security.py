@@ -11,8 +11,10 @@ Ranh giới trách nhiệm:
     lời "chuỗi này có chữ ký hợp lệ không" và "mật khẩu này có khớp hash không".
     Việc tra người dùng ra khỏi database và áp quy tắc phân quyền nằm ở app/api/deps.py.
 """
+import hashlib
 import hmac
 import os
+import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -171,24 +173,60 @@ def decode_token(token: str, expected_type: Optional[str] = None) -> dict:
 
 # --- Service token cho worker suy luận --------------------------------------
 
-def verify_service_token(presented: Optional[str]) -> bool:
-    """Xác thực worker suy luận bằng bí mật dùng chung.
+# Token dạng "wk_<id>_<bí mật>". id để tra đúng một dòng của worker_tokens; bí mật là 32 byte
+# ngẫu nhiên, chỉ lưu SHA-256 của nó. Xem setup_database.WorkerToken.
+TIEN_TO_TOKEN_WORKER = "wk"  # noqa: S105 - tiền tố định dạng, không phải bí mật
 
-    Vì sao không dùng JWT như người dùng: worker không đăng nhập, không có phiên và
-    không cần hết hạn. Nó cần đúng một thứ — chứng minh mình là worker. Một bí mật dùng
-    chung do người vận hành cấu hình là mô hình đúng với thực tế đó; dựng cả cơ chế
-    phiên cho một tiến trình nền chỉ thêm bộ phận để hỏng.
 
-    Dùng compare_digest chứ không dùng '==': so sánh chuỗi thông thường dừng ngay tại
-    byte đầu tiên khác nhau, và thời gian trả lời rò rỉ ra độ dài tiền tố đúng, đủ để
-    dò từng ký tự một.
+def bam_bi_mat_worker(bi_mat: str) -> str:
+    return hashlib.sha256(bi_mat.encode("utf-8")).hexdigest()
+
+
+def sinh_bi_mat_worker() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def ghep_token_worker(token_id: int, bi_mat: str) -> str:
+    return f"{TIEN_TO_TOKEN_WORKER}_{token_id}_{bi_mat}"
+
+
+def tach_token_worker(presented: str) -> Optional[tuple]:
+    """(id, bí mật) nếu đúng dạng, ngược lại None. token_urlsafe có thể chứa '_' nên chỉ tách 2 lần."""
+    phan = presented.split("_", 2)
+    if len(phan) != 3 or phan[0] != TIEN_TO_TOKEN_WORKER or not phan[1].isdigit() or not phan[2]:
+        return None
+    return int(phan[1]), phan[2]
+
+
+def verify_service_token(presented: Optional[str], db):
+    """Xác thực worker suy luận. Trả dòng WorkerToken còn hiệu lực, hoặc None.
+
+    Vì sao không dùng JWT như người dùng: worker không đăng nhập và không có phiên. Nó cần
+    chứng minh mình là worker NÀO, và người vận hành cần thu hồi được đúng một máy mà không
+    đụng tới máy khác. Tra database ở mỗi request nên thu hồi có hiệu lực ngay lập tức, không
+    phải chờ token tự hết hạn như JWT.
+
+    Không còn bí mật dùng chung INFERENCE_SERVICE_TOKEN ở phía máy chủ: chưa cấp token nào thì
+    mọi request đều bị từ chối — thiếu cấu hình vẫn là "cấm tất cả", không phải "cho tất cả".
+
+    Dùng compare_digest chứ không dùng '==': so sánh chuỗi thông thường dừng ngay tại byte đầu
+    tiên khác nhau, và thời gian trả lời rò rỉ ra độ dài tiền tố đúng.
     """
-    expected = os.getenv("INFERENCE_SERVICE_TOKEN", "")
-    if not expected or not expected.strip():
-        # Chưa cấu hình thì KHÔNG mở cổng. Coi thiếu cấu hình là "cấm tất cả" chứ không
-        # phải "cho tất cả": một biến môi trường quên set khi triển khai sẽ âm thầm gỡ
-        # bỏ toàn bộ lớp bảo vệ mà không có dấu hiệu nào.
-        return False
+    from setup_database import WorkerToken
+
     if not presented:
-        return False
-    return hmac.compare_digest(presented, expected)
+        return None
+    phan = tach_token_worker(presented)
+    if phan is None:
+        return None
+    token_id, bi_mat = phan
+    dong = db.get(WorkerToken, token_id)
+    if dong is None:
+        return None
+    if not hmac.compare_digest(bam_bi_mat_worker(bi_mat), dong.token_hash):
+        return None
+    if dong.revoked_at is not None:
+        return None
+    if dong.expires_at <= datetime.now(timezone.utc).replace(tzinfo=None):
+        return None
+    return dong
