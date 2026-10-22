@@ -12,7 +12,7 @@ dependencies = [
     "google-genai>=1.0.0",
     "python-dotenv>=1.2.3",
     "python-multipart>=0.0.32",
-    "pillow>=12.3.0",
+    "pillow>=13.0.0",
     "pyjwt>=2.15.0",
     "bcrypt>=5.0.0",
     # Khai bao truc tiep vi agent_service.py bat httpx.TransportError de biet luc nao
