@@ -189,7 +189,9 @@ from main import app                                           # noqa: E402
 from app.services import agent_service                         # noqa: E402
 from app.services import authz as _authz                       # noqa: E402
 
-client = TestClient(app)
+# Lỗi server là phản hồi HTTP 500 để kiểm hợp đồng status/body và tiếp tục các ca độc lập.
+# Ngoại lệ từ chính bộ kiểm tra vẫn đi qua excepthook và làm cổng đột biến báo error.
+client = TestClient(app, raise_server_exceptions=False)
 
 results = []
 
@@ -1447,6 +1449,14 @@ check(
 )
 os.environ["INFERENCE_SERVICE_TOKEN"] = _luu
 
+# Optional[str] là hợp đồng của hàm: thiếu header phải bị từ chối, không làm vỡ request.
+try:
+    _thieu_worker_bi_chan = sec.verify_service_token(None, _db_11ab) is None
+except Exception:
+    _thieu_worker_bi_chan = False
+check("11ab1) Token worker None bi tu choi ma khong nem loi", _thieu_worker_bi_chan)
+_db_11ab.close()
+
 # --- Khoa ky thieu/yeu thi tu choi chay ---
 _luu_key = os.environ["JWT_SECRET_KEY"]
 os.environ["JWT_SECRET_KEY"] = ""
@@ -1582,9 +1592,10 @@ check(
 )
 check(
     "12l) Thong bao 'khong phai cua anh' giong HET 'khong ton tai' -> khong dung de do ID",
-    view_stranger["error"].replace(str(child_record_id), "#") ==
+    "error" in view_stranger and "error" in view_khong_ton_tai
+    and view_stranger["error"].replace(str(child_record_id), "#") ==
     view_khong_ton_tai["error"].replace("999999", "#"),
-    f"{view_stranger['error']} || {view_khong_ton_tai['error']}",
+    f"{view_stranger.get('error')} || {view_khong_ton_tai.get('error')}",
 )
 
 ho_so_stranger = goi_tool(P_ESC, "tra_cuu_ho_so_be", 1)
@@ -3671,7 +3682,8 @@ check(
 
 check(
     "20h) Be khong ton tai va be cua nguoi khac tra cung mot thong bao, khong lo ID nao co that",
-    client.delete("/api/v1/children/999999", headers=CHA_MOI_H).status_code == 404
+    _r_cha_khac_xoa.status_code == 404
+    and client.delete("/api/v1/children/999999", headers=CHA_MOI_H).status_code == 404
     and _r_cha_khac_xoa.json()["detail"] == client.delete(
         f"/api/v1/children/{FIXTURE_CHILD_ID}", headers=CHA_MOI_H).json()["detail"].replace(
         str(FIXTURE_CHILD_ID), str(BE_XOA_API_ID)),
@@ -6779,7 +6791,7 @@ _spec41 = _ilu41.spec_from_file_location(
                                     "scripts", "worker_suy_luan.py"))
 _wk41 = _ilu41.module_from_spec(_spec41)
 _spec41.loader.exec_module(_wk41)
-_wc41 = TestClient(app, headers=WORKER_H)      # client cua worker: chi co token dich vu
+_wc41 = TestClient(app, headers=WORKER_H, raise_server_exceptions=False)
 
 # (a) Bang quy doi doc tu glossary, dung thang BITSS: BSFS 1-3 -> 1, 4 -> 2, 5-6 -> 3, 7 -> 4.
 _bang41 = [_qd41.nhom_cua_nhan_mo_hinh(i) for i in range(7)]
@@ -6917,7 +6929,12 @@ _ca41h1 = new_queued_record()
 _ca41h2 = new_queued_record()
 _kq41h1 = _wk41.xu_ly_mot_ca(_wc41, _ca41h1, _MoHinhHong41())
 _kq41h2 = _wk41.xu_ly_mot_ca(_wc41, _ca41h2, _wk41.BoPhanLoaiGia([0.1] * 7))
-_kq41h3 = _wk41.xu_ly_mot_ca(_wc41, _ca41h1, _wk41.BoPhanLoaiGia())
+try:
+    _kq41h3 = _wk41.xu_ly_mot_ca(_wc41, _ca41h1, _wk41.BoPhanLoaiGia())
+except _wk41.LoiBackend as _loi41h3:
+    # Hợp đồng là bỏ qua bằng 409. Backend trả lỗi khác phải là FAIL của 41h,
+    # không được làm mất toàn bộ các kiểm tra tiếp theo.
+    _kq41h3 = str(_loi41h3)
 with SessionLocal() as _db41:
     _loi41 = {r.id: (r.inference_status, r.inference_error or "") for r in
               _db41.query(StoolRecord).filter(StoolRecord.id.in_([_ca41h1, _ca41h2])).all()}
@@ -7413,6 +7430,8 @@ _CA44b = _r44ca2.json()["data"]["record_id"] if _r44ca2.status_code == 201 else 
 def _cap44(m, mau, that, gia, **kw):
     r1 = client.request(m, mau.format(that), headers=_H44["B"], **kw)
     r2 = client.request(m, mau.format(gia), headers=_H44["B"], **kw)
+    if r1.status_code != 404 or r2.status_code != 404:
+        return False, (r1.status_code, r2.status_code)
     d1 = str(r1.json().get("detail")).replace(str(that), "<id>")
     d2 = str(r2.json().get("detail")).replace(str(gia), "<id>")
     return (r1.status_code, d1) == (r2.status_code, d2) and r1.status_code == 404, (r1.status_code, d1, r2.status_code, d2)

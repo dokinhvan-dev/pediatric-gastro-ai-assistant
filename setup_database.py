@@ -608,6 +608,10 @@ def _chuyen_yeu_to_sang_bang_rieng() -> int:
     return so_dong
 
 
+class SchemaChuaSanSang(RuntimeError):
+    """Migration tự động chưa đủ; chặn cả CLI lẫn script gọi init_db()."""
+
+
 def init_db():
     """Tạo bảng còn thiếu và bổ sung cột còn thiếu cho database đã tồn tại.
 
@@ -628,14 +632,17 @@ def init_db():
         print("Da bo sung cot con thieu:", ", ".join(da_them))
     con_lech = kiem_tra_schema()
     if con_lech:
-        # Không ném exception: người vận hành đang đứng trước màn hình và cần đọc được
-        # đầy đủ danh sách, không phải một traceback.
-        print("CANH BAO - schema van con lech, can xu ly thu cong:")
-        for dong in con_lech:
-            print("   -", dong)
-        return
+        raise SchemaChuaSanSang(
+            "Schema van con lech, can xu ly thu cong:\n" + "\n".join("   - " + d for d in con_lech)
+        )
     print("Schema da san sang (khong seed du lieu mau).")
 
 
 if __name__ == "__main__":
-    init_db()
+    import sys
+
+    try:
+        init_db()
+    except SchemaChuaSanSang as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)

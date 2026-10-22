@@ -3,8 +3,9 @@
 Chạy:  uv run python danh_gia/kiem_thu_dot_bien.py          (mất vài phút, chạy song song 4 tiến trình)
 
 Mỗi đột biến là một lỗi nhỏ cố ý chèn vào MỘT BẢN SAO của mã (thư mục tạm, xoá khi xong); repo không bị
-sửa. Với mỗi đột biến, script chạy lại toàn bộ bộ kiểm tra trên bản sao. Đột biến "bị bắt" khi nó làm trượt
-thêm ít nhất một kiểm tra so với bản sao chưa đột biến, hoặc làm bộ kiểm tra dừng giữa chừng. Không gọi Gemini
+sửa. Với mỗi đột biến, script chạy lại toàn bộ bộ kiểm tra trên bản sao. Đột biến "bị bắt" khi bộ kiểm tra
+chạy đủ và có kiểm tra chức năng trượt. Crash, timeout hoặc mất kiểm tra là lỗi thí nghiệm, không tính là bắt.
+Không gọi Gemini
 (bộ kiểm tra tự đặt khoá API rỗng), không đụng data/ thật.
 
 Danh sách gồm 59 đột biến: D01–D19 dựng ngày 2026-10-01, rải trên các thành phần chính, gồm bốn đột biến nhắm
@@ -17,20 +18,25 @@ tăng cường bảo mật 1 (log nhánh lỗi của chat, tắt tài liệu API
 kiểm toán (mục 45): bỏ ghi ở từng loại sự kiện, bỏ trigger chỉ-ghi-thêm, trợ lý vẫn trả dữ liệu khi không ghi
 được nhật ký, không ghi IP; D54–D59 cho token dịch vụ riêng từng worker (mục 46). D07 và D15 giữ nguyên ý nghĩa
 nhưng nay nhắm vào verify_service_token mới (so băm bí mật của token worker thay cho bí mật dùng chung).
-D07 và D12 là đột biến tương đương (không đổi hành vi quan sát được), nên không kiểm tra chức năng nào bắt
-được chúng; chúng được giữ lại để thấy giới hạn của phương pháp.
+D07 và D12 tương đương trong phạm vi kiểm tra chức năng trên dữ liệu hợp lệ; D07 vẫn đổi đặc tính thời
+gian so sánh. Chúng được giữ lại với lý do riêng để thấy giới hạn của phương pháp.
 """
+import argparse
 import concurrent.futures
+import hashlib
+import json
 import os
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+from collections import Counter
+from datetime import datetime, timezone
+from pathlib import Path
 
-sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 GOC = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CHEP = ["app", "tests", "scripts", "danh_gia", "main.py", "setup_database.py", "pyproject.toml"]
+CHEP = ["app", "tests", "scripts", "danh_gia", "main.py", "setup_database.py", "pyproject.toml", "uv.lock"]
 
 # (nhãn, tệp, đoạn gốc, đoạn thay)
 DOT_BIEN = [
@@ -170,6 +176,12 @@ DOT_BIEN = [
 ]
 
 
+TUONG_DUONG = {
+    "D07": "Tương đương với kiểm tra chức năng; KHÔNG tương đương về thời gian so sánh token.",
+    "D12": "Tương đương trên bản ghi hợp lệ: stool_records.child_id có ràng buộc NOT NULL.",
+}
+
+
 def ban_sao(dich):
     os.makedirs(dich)
     for x in CHEP:
@@ -181,51 +193,158 @@ def ban_sao(dich):
     os.makedirs(os.path.join(dich, "data"))
 
 
-def chay_kiem_tra(thu_muc):
-    p = subprocess.run([sys.executable, "-B", os.path.join(thu_muc, "tests", "verify_task.py")],
-                       capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600,
-                       cwd=thu_muc, env={**os.environ, "PYTHONIOENCODING": "utf-8"})
-    truot = re.findall(r"^\[FAIL\] (\S+)\)", p.stdout, re.M)
-    tong = re.search(r"^(\d+)/(\d+) PASS", p.stdout, re.M)
-    return truot, (tong.group(0) if tong else "khong co dong tong ket")
+def doc_ket_qua(stdout, returncode):
+    """Chỉ nhận tổng kết đầy đủ, số dòng và mã thoát khớp với nhau."""
+    tong = re.findall(r"^(\d+)/(\d+) PASS[ \t]*\r?$", stdout, re.M)
+    dong = re.findall(r"^(PASS|FAIL): (.+)$", stdout, re.M)
+    ket = {"returncode": returncode, "passed": None, "total": None,
+           "checks": [ten.rstrip("\r") for _, ten in dong],
+           "failures": [ten.rstrip("\r") for status, ten in dong if status == "FAIL"],
+           "error": None}
+    if len(tong) != 1:
+        ket["error"] = "Thiếu hoặc có nhiều tổng kết đầy đủ (có thể dừng giữa chừng)."
+        return ket
+    dat, so = map(int, tong[0])
+    ket.update(passed=dat, total=so)
+    if (so <= 0 or dat > so or len(dong) != so
+            or sum(status == "PASS" for status, _ in dong) != dat):
+        ket["error"] = "Số kiểm tra/tổng kết không khớp."
+    elif returncode != (0 if dat == so else 1):
+        ket["error"] = "Mã thoát không khớp tổng kết kiểm tra."
+    return ket
+
+
+def _van_ban(value):
+    return value.decode("utf-8", errors="replace") if isinstance(value, bytes) else (value or "")
+
+
+def chay_kiem_tra(thu_muc, thu_muc_log, ma, timeout):
+    stdout, stderr, code, loi = "", "", None, None
+    try:
+        p = subprocess.run(
+            [sys.executable, "-B", os.path.join(thu_muc, "tests", "verify_task.py")],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=timeout, cwd=thu_muc,
+            env={**os.environ, "PYTHONIOENCODING": "utf-8", "GEMINI_API_KEY": ""},
+        )
+        stdout, stderr, code = p.stdout, p.stderr, p.returncode
+    except subprocess.TimeoutExpired as exc:
+        stdout, stderr = _van_ban(exc.stdout), _van_ban(exc.stderr)
+        loi = f"Timeout sau {timeout} giây."
+    except OSError as exc:
+        loi = f"Không khởi chạy được kiểm tra: {type(exc).__name__}: {exc}"
+    thu_muc_log = Path(thu_muc_log)
+    out = thu_muc_log / f"{ma}.stdout.log"
+    err = thu_muc_log / f"{ma}.stderr.log"
+    out.write_text(stdout, encoding="utf-8")
+    err.write_text(stderr, encoding="utf-8")
+    ket = doc_ket_qua(stdout, code)
+    if loi:
+        ket["error"] = loi
+    ket.update(stdout_log=out.name, stderr_log=err.name)
+    return ket
+
+
+def phan_loai(ma, lan_chay, goc):
+    if lan_chay["error"]:
+        return "error", lan_chay["error"]
+    if Counter(lan_chay["checks"]) != Counter(goc["checks"]):
+        return "error", "Danh sách kiểm tra thay đổi so với bản gốc."
+    if lan_chay["failures"]:
+        if ma in TUONG_DUONG:
+            return "error", "Đột biến được miễn là tương đương đã đổi hành vi; phải duyệt lại lý do."
+        return "killed", "Có kiểm tra chức năng trượt; bộ kiểm tra chạy đủ."
+    if ma in TUONG_DUONG:
+        return "equivalent", TUONG_DUONG[ma]
+    return "survived", "Không có kiểm tra nào phát hiện đột biến."
 
 
 def mot_dot_bien(args):
-    i, (nhan, tep, goc, moi), thu_muc_tam = args
-    d = os.path.join(thu_muc_tam, f"db{i:02d}")
-    ban_sao(d)
-    duong = os.path.join(d, tep)
-    with open(duong, encoding="utf-8") as f:
-        ma = f.read()
-    if ma.count(goc) != 1:
-        return nhan, None, f"đoạn gốc xuất hiện {ma.count(goc)} lần (mã đã đổi, cần cập nhật đột biến)"
-    with open(duong, "w", encoding="utf-8", newline="") as f:
-        f.write(ma.replace(goc, moi))
-    return nhan, chay_kiem_tra(d), None
-
-
-def main():
-    thu_muc_tam = tempfile.mkdtemp(prefix="kiem_thu_dot_bien_")
+    (nhan, tep, goc, moi), snapshot, thu_muc_tam, logs, timeout, baseline = args
+    ma = nhan.split()[0]
+    ket = {"id": ma, "label": nhan, "file": tep, "status": "error", "reason": "", "run": None}
     try:
-        ban_sao(os.path.join(thu_muc_tam, "goc"))
-        truot_goc, tong_goc = chay_kiem_tra(os.path.join(thu_muc_tam, "goc"))
-        print(f"Bản sao chưa đột biến: {tong_goc}" + (f" (trượt sẵn: {truot_goc})" if truot_goc else ""))
-        with concurrent.futures.ThreadPoolExecutor(4) as ex:
-            ket_qua = list(ex.map(mot_dot_bien, [(i + 1, d, thu_muc_tam) for i, d in enumerate(DOT_BIEN)]))
-        bi_bat = 0
-        for nhan, r, loi in ket_qua:
-            if loi:
-                print(f"LỖI  {nhan}: {loi}")
-                continue
-            truot, tong = r
-            moi = [t for t in truot if t not in truot_goc]
-            bat = bool(moi) or "khong co" in tong
-            bi_bat += bat
-            print(f"{'BẮT ' if bat else 'SỐNG'} {nhan[:56]:56} | {tong:28} | {', '.join(moi[:6])}")
-        print(f"\nTổng: {bi_bat}/{len(DOT_BIEN)} đột biến bị bắt (D07, D12 là đột biến tương đương).")
-    finally:
-        shutil.rmtree(thu_muc_tam, ignore_errors=True)
+        d = Path(thu_muc_tam) / ma
+        shutil.copytree(snapshot, d, ignore=shutil.ignore_patterns("__pycache__"))
+        duong = d / tep
+        nguon = duong.read_text(encoding="utf-8")
+        if nguon.count(goc) != 1:
+            ket["reason"] = f"Đoạn gốc xuất hiện {nguon.count(goc)} lần; cần cập nhật đột biến."
+            return ket
+        duong.write_text(nguon.replace(goc, moi), encoding="utf-8", newline="")
+        ket["run"] = chay_kiem_tra(d, logs, ma, timeout)
+        ket["status"], ket["reason"] = phan_loai(ma, ket["run"], baseline)
+    except Exception as exc:
+        # Lỗi dựng/chạy mutant phải hiện trong JSON và làm cổng thất bại.
+        ket["reason"] = f"{type(exc).__name__}: {exc}"
+    return ket
+
+
+def ma_thoat(baseline, results):
+    if baseline["error"] or baseline["failures"] or any(r["status"] == "error" for r in results):
+        return 2
+    return 1 if any(r["status"] == "survived" for r in results) else 0
+
+
+def dau_van_tay(snapshot):
+    files = {p.relative_to(snapshot).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+             for p in sorted(Path(snapshot).rglob("*")) if p.is_file() and "__pycache__" not in p.parts}
+    return hashlib.sha256(json.dumps(files, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def _so_duong(value):
+    so = int(value)
+    if so <= 0:
+        raise argparse.ArgumentTypeError("Phải lớn hơn 0.")
+    return so
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--chi", nargs="+", metavar="Dxx", help="Chỉ chạy các mã này (mặc định: tất cả).")
+    parser.add_argument("--workers", type=_so_duong, default=4)
+    parser.add_argument("--timeout", type=_so_duong, default=600, help="Giây cho mỗi lần chạy bộ kiểm tra.")
+    parser.add_argument("--output-dir", help="Thư mục MỚI lưu JSON và log; không ghi đè đợt cũ.")
+    args = parser.parse_args(argv)
+    cac_ma = {d[0].split()[0] for d in DOT_BIEN}
+    if args.chi and (set(args.chi) - cac_ma):
+        parser.error("Mã đột biến không có: " + ", ".join(sorted(set(args.chi) - cac_ma)))
+    chon = [d for d in DOT_BIEN if not args.chi or d[0].split()[0] in args.chi]
+    bat_dau = datetime.now(timezone.utc)
+    logs = Path(args.output_dir or os.path.join(
+        GOC, "outputs", "logs", "dot_bien_" + bat_dau.strftime("%Y%m%dT%H%M%S%fZ"))).resolve()
+    try:
+        logs.mkdir(parents=True, exist_ok=False)
+    except FileExistsError:
+        parser.error(f"Thư mục đã tồn tại, không ghi đè: {logs}")
+    report = {"schema_version": 1, "started_at_utc": bat_dau.isoformat(),
+              "selected": [d[0].split()[0] for d in chon], "baseline": None,
+              "results": [], "source_sha256": None}
+    with tempfile.TemporaryDirectory(prefix="kiem_thu_dot_bien_") as tam:
+        snapshot = Path(tam) / "goc"
+        ban_sao(snapshot)
+        report["source_sha256"] = dau_van_tay(snapshot)
+        baseline = chay_kiem_tra(snapshot, logs, "baseline", args.timeout)
+        report["baseline"] = baseline
+        print(f"Bản gốc: {baseline['passed']}/{baseline['total']} PASS; lỗi={baseline['error']}", flush=True)
+        if not baseline["error"] and not baseline["failures"]:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as ex:
+                pending = [ex.submit(mot_dot_bien, (d, snapshot, tam, logs, args.timeout, baseline))
+                           for d in chon]
+                for f in concurrent.futures.as_completed(pending):
+                    r = f.result()
+                    report["results"].append(r)
+                    print(f"{r['id']} {r['status']}: {r['reason']}", flush=True)
+        report["results"].sort(key=lambda r: r["id"])
+        code = ma_thoat(baseline, report["results"])
+    report.update(finished_at_utc=datetime.now(timezone.utc).isoformat(), exit_code=code,
+                  counts=dict(Counter(r["status"] for r in report["results"])))
+    (logs / "ket_qua.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n",
+                                      encoding="utf-8")
+    print(f"Tổng: {report['counts']}; exit={code}; báo cáo: {logs / 'ket_qua.json'}", flush=True)
+    return code
 
 
 if __name__ == "__main__":
-    main()
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.exit(main())

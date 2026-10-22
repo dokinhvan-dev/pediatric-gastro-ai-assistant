@@ -57,6 +57,7 @@ jobs:
   tests:
     name: Kiem thu (verify_task.py)
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -64,3 +65,14 @@ jobs:
       # GEMINI_API_KEY: khong can bi mat nao cua repo va khong goi Gemini that.
       - name: verify_task.py
         run: uv run --frozen python tests/verify_task.py
+      - name: Cong dot bien va migration (regression)
+        run: uv run --frozen python -m unittest discover -s tests -p "test_*.py" -v
+      - name: Du 59 dot bien (khong chap nhan survived/error)
+        run: uv run --frozen python danh_gia/kiem_thu_dot_bien.py --workers 4 --timeout 600 --output-dir outputs/logs/ci-dot-bien
+      - name: Luu bang chung dot bien theo SHA
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dot-bien-${{ github.sha }}
+          path: outputs/logs/ci-dot-bien/
+          retention-days: 14
