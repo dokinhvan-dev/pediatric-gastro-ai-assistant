@@ -30,8 +30,8 @@ kiểm tra bên trong:
 RANH GIỚI DỮ LIỆU: mỗi lượt chat gửi bệnh án ra khỏi hệ thống, sang máy chủ của Google.
 
     Đây là điều quan trọng nhất cần biết về file này, và nó không hiển nhiên khi đọc code:
-    mọi thứ công cụ trả về đều đi vào request gửi tới Gemini. Không có bước lọc nào ở
-    giữa, và không thể có — model cần chính những dữ liệu đó để tư vấn.
+    kết quả công cụ đi vào request gửi tới Gemini. Công cụ chỉ xuất các trường đã chọn;
+    tên hồ sơ được thay bằng bí danh, không phải đưa tên vào prompt rồi nhờ model tự bỏ.
 
     Hồ sơ bé CHỈ đi ra khi gia đình sở hữu hồ sơ đã đồng ý (app/services/dong_y.py) — xét
     theo chủ hồ sơ, không theo người hỏi, ở mọi công cụ đọc database. Chưa đồng ý thì chỉ
@@ -40,9 +40,9 @@ RANH GIỚI DỮ LIỆU: mỗi lượt chat gửi bệnh án ra khỏi hệ th�
     Kiểm kê chính xác khi CÓ đồng thuận, đo bằng cách bắt lại payload thật. Danh sách
     chuẩn nằm ở dong_y.DU_LIEU_GUI_DI / DU_LIEU_KHONG_GUI — cũng là nội dung thông báo
     người dùng đồng ý — và mục 24 trong verify_task.py đối chiếu nó với payload thật:
-      Gửi đi:  tin nhắn và lịch sử gần đây, tên bé, tháng tuổi / cân nặng / chế độ ăn,
+      Gửi đi:  tin nhắn và lịch sử W02, bí danh từ child_id, tháng tuổi / cân nặng / chế độ ăn,
                yếu tố lâm sàng đã chọn, kết quả BITSS và trạng thái duyệt, lời dặn bác sĩ.
-      Không:   ảnh và đường dẫn ảnh, email và mật khẩu, ghi chú tự do của hồ sơ bé,
+      Không:   trường tên bé trong hồ sơ, ảnh và đường dẫn ảnh, email/mật khẩu, ghi chú hồ sơ,
                tên bác sĩ đã ký, họ tên người đang hỏi.
     Ba mục cuối của dòng "Không" từng được gửi đi, và đã được cắt vì model không cần chúng.
 
@@ -72,7 +72,7 @@ from google.genai import errors as genai_errors
 from google.genai import types
 from setup_database import SessionLocal, Child, StoolRecord, DoctorReview
 
-from app.services import bitss, dong_y, nhat_ky_kiem_toan as kiem_toan, records_query, yeu_to_lam_sang
+from app.services import bitss, chat_history, dong_y, nhat_ky_kiem_toan as kiem_toan, records_query, yeu_to_lam_sang
 from app.services.authz import (
     CurrentUser,
     can_view_child,
@@ -123,6 +123,11 @@ CHUA_DONG_Y_CHIA_SE = {
 }
 
 
+def bi_danh_be(child_id: int) -> str:
+    """ID đã được gửi cho LLM; bí danh không phải ẩn danh hoá hay chốt phân quyền."""
+    return f"Bé #{child_id}"
+
+
 def _age_months_now(date_of_birth) -> float:
     delta_days = (datetime.now(timezone.utc).date() - date_of_birth).days
     return round(max(delta_days, 0) / DAYS_PER_MONTH, 2)
@@ -160,12 +165,8 @@ def _ket_qua_ai_phan(principal, record_id: int) -> dict:
             "che_do_an_tai_thoi_diem_quan_sat": record.feeding_type_at_observation,
         }
         thong_tin_lam_sang["child_id"] = record.child_id
-        # Tên bé được trả lại ở đây sau khi bị bịt tạm suốt giai đoạn P0-c. Lúc đó
-        # hệ thống không có khái niệm "ai đang hỏi" nên lựa chọn duy nhất an toàn là
-        # giấu với tất cả — kể cả bố mẹ bé. Nay người gọi đã qua can_view_record ở
-        # trên, tức là bác sĩ hoặc đúng chủ hồ sơ, nên giấu nữa chỉ còn là phiền phức.
-        if child:
-            thong_tin_lam_sang["ten_be"] = child.name
+        # Bí danh từ ID đã có, không đọc trường tên tự do vào payload LLM.
+        thong_tin_lam_sang["bi_danh_be"] = bi_danh_be(record.child_id)
 
         # Chỉ lấy review đã là bản đánh giá cuối cùng (is_final=True), bỏ qua các review nháp/chưa chốt
         review = (
@@ -219,7 +220,7 @@ def _ho_so_be(principal, child_id: int) -> dict:
 
         return {
             "child_id": child.id,
-            "ten_be": child.name,
+            "bi_danh_be": bi_danh_be(child.id),
             "thang_tuoi_hien_tai": _age_months_now(child.date_of_birth),
             "can_nang_kg": child.weight_kg,
             "che_do_an": child.feeding_type,
@@ -266,7 +267,7 @@ def _danh_sach_con(principal) -> dict:
             "danh_sach": [
                 {
                     "child_id": c.id,
-                    "ten_be": c.name,
+                    "bi_danh_be": bi_danh_be(c.id),
                     "thang_tuoi_hien_tai": _age_months_now(c.date_of_birth),
                     "che_do_an": c.feeding_type,
                 }
@@ -310,7 +311,7 @@ def _lich_su_cua_be(principal, child_id: int) -> dict:
 
         ket = {
             "child_id": child.id,
-            "ten_be": child.name,
+            "bi_danh_be": bi_danh_be(child.id),
             "total_records": tong,
             "history": [_tom_tat_record(r) for r in records],
         }
@@ -411,7 +412,7 @@ def build_tools(principal) -> list:
         return _ket_qua_ai_phan(principal, record_id)
 
     def tra_cuu_ho_so_be(child_id: int) -> dict:
-        """Tra cứu hồ sơ một bệnh nhi đã đăng ký theo child_id: tên, tháng tuổi hiện tại, cân nặng, chế độ ăn và các yếu tố lâm sàng nền (dị ứng, thuốc đang dùng, sinh non...)."""
+        """Tra cứu hồ sơ một bệnh nhi đã đăng ký theo child_id: bí danh, tháng tuổi hiện tại, cân nặng, chế độ ăn và các yếu tố lâm sàng nền (dị ứng, thuốc đang dùng, sinh non...)."""
         return _ho_so_be(principal, child_id)
 
     def tra_cuu_lich_su_cua_be(child_id: int) -> dict:
@@ -1061,6 +1062,9 @@ def _la_han_muc_ngay(exc) -> bool:
 SYSTEM_INSTRUCTION = (
         "Bạn là Trợ lý AI Y khoa phân tích tiêu hóa nhi khoa theo tiêu chuẩn BITSS. "
         "BẮT BUỘC sử dụng các công cụ được cung cấp để đọc dữ liệu trước khi tư vấn. "
+        "Tên hồ sơ không được cung cấp. Dùng bi_danh_be và child_id để phân biệt các bé, "
+        "không suy đoán tên thật hoặc suy ra child_id từ tên người dùng gõ. Nếu chưa rõ bé nào, "
+        "hãy hỏi child_id hoặc bí danh lấy từ công cụ, không tự chọn một bé khi có nhiều hồ sơ. "
         "Quy tắc phản hồi: "
         "1. Luôn trích xuất thông tin lâm sàng (tháng tuổi, chế độ ăn) của chính ca đang nói tới để cá nhân hóa phân tích "
         "— dùng chúng để giải thích cho đúng lứa tuổi, KHÔNG liệt kê lại hồ sơ cho phụ huynh vốn đã biết. "
@@ -1563,6 +1567,7 @@ def run_agent_chat_chi_tiet(message: str, principal=None, lich_su=None) -> KetQu
     contents = [
         types.Content(role=m.role, parts=[types.Part.from_text(text=m.content)])
         for m in lich_su
+        if getattr(m, "phien_ban_ngu_canh", None) == chat_history.PHIEN_BAN_NGU_CANH
     ]
     contents.append(types.Content(role="user", parts=[types.Part.from_text(text=message)]))
 

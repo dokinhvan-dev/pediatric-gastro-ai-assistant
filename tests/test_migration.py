@@ -159,6 +159,21 @@ class MigrationTests(unittest.TestCase):
         self.assertIn("users.password_hash", result.stderr)
         self.assertNotIn("Schema da san sang", result.stdout)
 
+    def test_w02_old_history_stays_unversioned_after_migration(self):
+        self.init()
+        self.seed_family()
+        with self.db.engine.begin() as conn:
+            conn.exec_driver_sql("ALTER TABLE chat_messages DROP COLUMN phien_ban_ngu_canh")
+            conn.exec_driver_sql(
+                "INSERT INTO chat_messages (user_id,role,content,created_at) "
+                "VALUES (1,'model','Legacy name from profile',CURRENT_TIMESTAMP)")
+        self.init()
+        self.init()
+        self.assertEqual(self.db.kiem_tra_schema(), [])
+        self.assertEqual(self.scalar("SELECT count(*) FROM chat_messages"), 1)
+        self.assertIsNone(self.scalar("SELECT phien_ban_ngu_canh FROM chat_messages"))
+        self.assertEqual(self.scalar("SELECT content FROM chat_messages"), "Legacy name from profile")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -383,6 +383,9 @@ class ChatMessage(Base):
     # một bảng ánh xạ tên nữa chỉ thêm chỗ để lệch.
     role = Column(String(10), nullable=False)
     content = Column(Text, nullable=False)
+    # NULL là lịch sử trước W02: giữ để xoá theo thời hạn, KHÔNG nạp lại cho LLM.
+    # Không có default: migrate không được vô tình coi nội dung cũ là đã xử lý.
+    phien_ban_ngu_canh = Column(String(30), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), nullable=False)
 
     __table_args__ = (

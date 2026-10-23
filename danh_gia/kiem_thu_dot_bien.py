@@ -8,7 +8,7 @@ chạy đủ và có kiểm tra chức năng trượt. Crash, timeout hoặc m�
 Không gọi Gemini
 (bộ kiểm tra tự đặt khoá API rỗng), không đụng data/ thật.
 
-Danh sách gồm 59 đột biến: D01–D19 dựng ngày 2026-10-01, rải trên các thành phần chính, gồm bốn đột biến nhắm
+Danh sách gồm 66 đột biến: D01–D19 dựng ngày 2026-10-01, rải trên các thành phần chính, gồm bốn đột biến nhắm
 thẳng vào bất biến B1–B4; D20–D25 dựng ngày 2026-10-05, mỗi đột biến đảo ngược một bản sửa lỗi sau đợt đo;
 D26 dựng ngày 2026-10-08 cho bản sửa ghi chú JPEG còn sót sau bước làm sạch ảnh; D27–D30 dựng ngày 2026-10-10
 cho phần nối mô hình ảnh (quy đổi nhãn 7 loại sang 4 nhóm, hàng chờ và ảnh cho worker); D31–D33 dựng ngày
@@ -175,6 +175,30 @@ DOT_BIEN = [
      "                  chi_tiet=dong.ten)\n", ""),
 ]
 
+
+# W02: tên hồ sơ quay lại bốn công cụ; lịch sử cũ; dấu phiên bản khi ghi và khi gửi.
+DOT_BIEN += [
+    ("D60 W02: ten ho so quay lai tool ket qua ca", "app/services/agent_service.py",
+     '        thong_tin_lam_sang["bi_danh_be"] = bi_danh_be(record.child_id)',
+     '        thong_tin_lam_sang["bi_danh_be"] = bi_danh_be(record.child_id)\n'
+     '        thong_tin_lam_sang["ten_be"] = child.name'),
+    ("D61 W02: ten ho so quay lai tool ho so", "app/services/agent_service.py",
+     '"bi_danh_be": bi_danh_be(child.id),\n            "thang_tuoi_hien_tai"',
+     '"ten_be": child.name,\n            "thang_tuoi_hien_tai"'),
+    ("D62 W02: ten ho so quay lai tool danh sach", "app/services/agent_service.py",
+     '"bi_danh_be": bi_danh_be(c.id),', '"ten_be": c.name,'),
+    ("D63 W02: ten ho so quay lai tool lich su ca", "app/services/agent_service.py",
+     '"bi_danh_be": bi_danh_be(child.id),\n            "total_records"',
+     '"ten_be": child.name,\n            "total_records"'),
+    ("D64 W02: DB nap lai lich su cu", "app/services/chat_history.py",
+     ',\n                ChatMessage.phien_ban_ngu_canh == PHIEN_BAN_NGU_CANH', ''),
+    ("D65 W02: khong gan phien ban cho tra loi moi", "app/services/chat_history.py",
+     '    db.add(ChatMessage(user_id=uid, role="model", content=dap[:MAX_KY_TU_MOI_TIN],\n'
+     '                       phien_ban_ngu_canh=PHIEN_BAN_NGU_CANH))',
+     '    db.add(ChatMessage(user_id=uid, role="model", content=dap[:MAX_KY_TU_MOI_TIN]))'),
+    ("D66 W02: bo chan lich su cu o bien gui LLM", "app/services/agent_service.py",
+     '        if getattr(m, "phien_ban_ngu_canh", None) == chat_history.PHIEN_BAN_NGU_CANH\n', ''),
+]
 
 TUONG_DUONG = {
     "D07": "Tương đương với kiểm tra chức năng; KHÔNG tương đương về thời gian so sánh token.",
