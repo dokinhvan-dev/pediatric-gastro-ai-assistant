@@ -39,7 +39,7 @@ NHA_CUNG_CAP = "Google (Gemini API)"
 # phép lạc hậu so với hành vi thật — lúc đó nó không còn là thông báo mà là lời nói dối.
 DU_LIEU_GUI_DI = {
     "tin_nhan_va_lich_su": "Những gì bạn gõ trong ô chat và nội dung các lượt trò chuyện gần đây",
-    "ten_be": "Tên bé",
+    "bi_danh_be": "Bí danh dạng Bé #<child_id>, cùng ID hồ sơ để phân biệt các bé",
     "thong_tin_co_ban": "Tháng tuổi, cân nặng, chế độ ăn của bé",
     "yeu_to_lam_sang": "Các yếu tố lâm sàng bạn đã chọn trong hồ sơ bé (ví dụ: dị ứng đạm sữa bò)",
     "ket_qua_phan_tich": "Kết quả phân loại BITSS, độ tin cậy, trạng thái duyệt của các ca",
@@ -47,6 +47,7 @@ DU_LIEU_GUI_DI = {
 }
 
 DU_LIEU_KHONG_GUI = {
+    "ten_be": "Trường tên thật trong hồ sơ bé; công cụ dùng bí danh thay thế",
     "anh": "Ảnh bạn tải lên và đường dẫn lưu ảnh",
     "email_mat_khau": "Email và mật khẩu",
     "ghi_chu_tu_do": "Phần ghi chú tự do trong hồ sơ bé (chỉ bác sĩ đọc)",
@@ -65,6 +66,9 @@ def thong_bao() -> dict:
             "thống sẽ gửi kèm hồ sơ của bé để trợ lý trả lời sát với tình trạng của bé. "
             "Khi chưa đồng ý, trợ lý chỉ trả lời kiến thức chung — nhưng những gì bạn tự gõ "
             "vẫn luôn được gửi đi, vì đó là cách ô chat hoạt động."
+            " Công cụ không gửi trường tên bé trong hồ sơ. Bí danh vẫn liên kết với ID, "
+            "không phải dữ liệu ẩn danh. Tên hoặc thông tin cá nhân bạn tự gõ, hay có "
+            "trong lời dặn tự do của bác sĩ, vẫn có thể được gửi đi."
         ),
         "gui_di_khi_dong_y": [{"ma": m, "mo_ta": t} for m, t in DU_LIEU_GUI_DI.items()],
         "khong_bao_gio_gui": [{"ma": m, "mo_ta": t} for m, t in DU_LIEU_KHONG_GUI.items()],
@@ -73,6 +77,10 @@ def thong_bao() -> dict:
             "Rút lại đồng ý sẽ xoá toàn bộ lịch sử trò chuyện của bạn."
         ),
         "luu_tru_lich_su": _luu_tru_lich_su(),
+        "chuyen_doi_lich_su": (
+            "Lịch sử trước W02 không được nạp lại cho AI vì có thể chứa tên từ hồ sơ. "
+            "Dữ liệu cũ vẫn được giữ tới thời hạn lưu hoặc tới khi bạn xoá lịch sử."
+        ),
     }
 
 

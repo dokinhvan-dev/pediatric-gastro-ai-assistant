@@ -48,6 +48,7 @@ SO_LUOT_NHO_LAI = 6
 # Chặn trên độ dài MỘT tin nhắn được nạp lại. Câu trả lời của model có thể rất dài;
 # sáu câu như thế đủ đẩy phần đầu ngữ cảnh ra ngoài cửa sổ.
 MAX_KY_TU_MOI_TIN = 2000
+PHIEN_BAN_NGU_CANH = "w02-2026-10-23"
 
 logger = logging.getLogger("bitss.chat_history")
 
@@ -151,7 +152,8 @@ def doc_lich_su(db, principal) -> List[ChatMessage]:
     # id là khoá phụ để hai tin trong cùng một giây không đổi chỗ cho nhau.
     rows = (
         db.query(ChatMessage)
-        .filter(ChatMessage.user_id == uid, ChatMessage.created_at >= moc_het_han())
+        .filter(ChatMessage.user_id == uid, ChatMessage.created_at >= moc_het_han(),
+                ChatMessage.phien_ban_ngu_canh == PHIEN_BAN_NGU_CANH)
         .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
         .limit(SO_LUOT_NHO_LAI * 2)
         .all()
@@ -185,8 +187,10 @@ def ghi_luot(db, principal, cau_hoi: str, cau_tra_loi: str) -> bool:
     if not hoi or not dap:
         return False
 
-    db.add(ChatMessage(user_id=uid, role="user", content=hoi[:MAX_KY_TU_MOI_TIN]))
-    db.add(ChatMessage(user_id=uid, role="model", content=dap[:MAX_KY_TU_MOI_TIN]))
+    db.add(ChatMessage(user_id=uid, role="user", content=hoi[:MAX_KY_TU_MOI_TIN],
+                       phien_ban_ngu_canh=PHIEN_BAN_NGU_CANH))
+    db.add(ChatMessage(user_id=uid, role="model", content=dap[:MAX_KY_TU_MOI_TIN],
+                       phien_ban_ngu_canh=PHIEN_BAN_NGU_CANH))
     db.commit()
     return True
 
