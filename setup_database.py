@@ -383,6 +383,9 @@ class ChatMessage(Base):
     # một bảng ánh xạ tên nữa chỉ thêm chỗ để lệch.
     role = Column(String(10), nullable=False)
     content = Column(Text, nullable=False)
+    # NULL là lịch sử trước W02: giữ để xoá theo thời hạn, KHÔNG nạp lại cho LLM.
+    # Không có default: migrate không được vô tình coi nội dung cũ là đã xử lý.
+    phien_ban_ngu_canh = Column(String(30), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), nullable=False)
 
     __table_args__ = (
@@ -392,6 +395,94 @@ class ChatMessage(Base):
         # thứ tự đó. Thiếu nó thì mỗi lượt chat quét toàn bảng.
         Index("ix_chat_user_time", "user_id", "created_at"),
     )
+
+
+class AuditLog(Base):
+    """Nhật ký kiểm toán: ai làm gì với hồ sơ nào, lúc nào, từ đâu, được hay bị từ chối.
+
+    Trả lời những câu mà log ứng dụng không trả lời được: ai đã xem ảnh của bé này, ai chốt
+    nhãn ca này, gia đình rút đồng thuận lúc nào. Ghi qua app/services/nhat_ky_kiem_toan.py.
+
+    Chỉ chứa mã định danh và mã hành động — KHÔNG tên, email, nội dung tin nhắn hay kết quả
+    lâm sàng. Nhật ký thường sống lâu hơn dữ liệu nó mô tả, và không được thành bản sao PII.
+
+    Vì sao không có khoá ngoại tới users/children/stool_records:
+        RESTRICT sẽ khiến không xoá được người dùng hay hồ sơ nào đã từng được xem; CASCADE
+        thì xoá dữ liệu kéo theo xoá luôn dấu vết ai đã đụng vào nó — đúng thứ nhật ký này
+        phải giữ. Cột chỉ là số; nhật ký vẫn đứng được khi đối tượng không còn.
+
+    Chỉ ghi thêm: trigger (tạo cùng bảng, xem bên dưới) chặn mọi UPDATE và DELETE ngay ở
+    database, không chỉ ở tầng ứng dụng.
+    """
+    __tablename__ = "audit_log"
+
+    id = Column(Integer, primary_key=True)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), nullable=False)
+    # NULL khi chưa đăng nhập hoặc là worker suy luận; actor_role phân biệt hai trường hợp.
+    actor_user_id = Column(Integer, nullable=True)
+    # id trong worker_tokens khi người làm là worker suy luận: biết đúng máy nào ghi kết quả.
+    actor_worker_id = Column(Integer, nullable=True)
+    actor_role = Column(String(20), nullable=False)
+    action = Column(String(50), nullable=False)
+    object_type = Column(String(20), nullable=True)
+    object_id = Column(Integer, nullable=True)
+    outcome = Column(String(10), nullable=False)
+    ip = Column(String(45), nullable=True)
+    # Mã ngắn (tên công cụ, quyết định duyệt), không bao giờ là văn bản tự do của người dùng.
+    detail = Column(String(100), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("outcome IN ('success', 'denied')", name="chk_audit_outcome_valid"),
+        # "Ai đã đụng vào hồ sơ này" và "người này đã làm gì" là hai câu hỏi thường gặp nhất.
+        Index("ix_audit_object_time", "object_type", "object_id", "created_at"),
+        Index("ix_audit_actor_time", "actor_user_id", "created_at"),
+    )
+
+
+class WorkerToken(Base):
+    """Token dịch vụ RIÊNG cho từng worker suy luận, có hạn dùng và thu hồi được.
+
+    Thay cho một bí mật dùng chung trong biến môi trường: lộ bí mật chung là giả được kết quả
+    suy luận của mọi máy, không biết máy nào đã ghi, và đổi nó là dừng cả đàn worker cùng lúc.
+    Mỗi worker một dòng: lộ token nào thì thu hồi đúng token đó, nhật ký kiểm toán ghi được
+    worker nào làm gì (audit_log.actor_worker_id).
+
+    Chỉ lưu SHA-256 của phần bí mật, không lưu token. Bí mật là 32 byte ngẫu nhiên nên băm một
+    lần là đủ (không phải mật khẩu người đặt, không cần bcrypt); đọc trộm database không dùng
+    được token nào. Token đầy đủ chỉ hiện đúng một lần, lúc cấp (scripts/token_worker.py).
+
+    Không chỉ-ghi-thêm như audit_log: thu hồi chính là UPDATE revoked_at. Dòng không bao giờ bị
+    xoá, để id trong nhật ký kiểm toán luôn tra ngược được ra tên worker.
+    """
+    __tablename__ = "worker_tokens"
+
+    id = Column(Integer, primary_key=True)
+    ten = Column(String(50), nullable=False, index=True)
+    token_hash = Column(String(64), nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    revoked_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("length(trim(ten)) > 0", name="chk_worker_token_ten_khong_rong"),
+        CheckConstraint("length(token_hash) = 64", name="chk_worker_token_hash_sha256"),
+    )
+
+
+TRIGGER_AUDIT_CHI_GHI_THEM = (
+    "CREATE TRIGGER IF NOT EXISTS trg_audit_log_cam_sua BEFORE UPDATE ON audit_log "
+    "BEGIN SELECT RAISE(ABORT, 'audit_log chi duoc ghi them'); END",
+    "CREATE TRIGGER IF NOT EXISTS trg_audit_log_cam_xoa BEFORE DELETE ON audit_log "
+    "BEGIN SELECT RAISE(ABORT, 'audit_log chi duoc ghi them'); END",
+)
+
+
+@event.listens_for(AuditLog.__table__, "after_create")
+def _tao_trigger_audit(target, connection, **kw):
+    # Chỉ SQLite: cú pháp trigger khác nhau giữa các database, và dự án hiện chỉ chạy SQLite.
+    if connection.dialect.name == "sqlite":
+        for cau_lenh in TRIGGER_AUDIT_CHI_GHI_THEM:
+            connection.exec_driver_sql(cau_lenh)
 
 
 # =====================================================================
@@ -520,6 +611,10 @@ def _chuyen_yeu_to_sang_bang_rieng() -> int:
     return so_dong
 
 
+class SchemaChuaSanSang(RuntimeError):
+    """Migration tự động chưa đủ; chặn cả CLI lẫn script gọi init_db()."""
+
+
 def init_db():
     """Tạo bảng còn thiếu và bổ sung cột còn thiếu cho database đã tồn tại.
 
@@ -540,14 +635,17 @@ def init_db():
         print("Da bo sung cot con thieu:", ", ".join(da_them))
     con_lech = kiem_tra_schema()
     if con_lech:
-        # Không ném exception: người vận hành đang đứng trước màn hình và cần đọc được
-        # đầy đủ danh sách, không phải một traceback.
-        print("CANH BAO - schema van con lech, can xu ly thu cong:")
-        for dong in con_lech:
-            print("   -", dong)
-        return
+        raise SchemaChuaSanSang(
+            "Schema van con lech, can xu ly thu cong:\n" + "\n".join("   - " + d for d in con_lech)
+        )
     print("Schema da san sang (khong seed du lieu mau).")
 
 
 if __name__ == "__main__":
-    init_db()
+    import sys
+
+    try:
+        init_db()
+    except SchemaChuaSanSang as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)

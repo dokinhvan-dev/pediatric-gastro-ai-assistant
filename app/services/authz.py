@@ -40,6 +40,17 @@ class CurrentUser:
     role: str
 
 
+@dataclass(frozen=True)
+class WorkerDanhTinh:
+    """Worker suy luận đã xác thực bằng token riêng (setup_database.WorkerToken).
+
+    Không phải người: không có user_id, không có vai trò người dùng, không bao giờ đi qua
+    can_view_*. Chỉ dùng cho các endpoint worker và để nhật ký kiểm toán ghi đúng máy nào.
+    """
+    id: int
+    ten: str
+
+
 def la_nhan_vien_y_te(principal) -> bool:
     """Bác sĩ hoặc admin — nhóm được phép đọc hồ sơ của người lạ."""
     return isinstance(principal, CurrentUser) and principal.role in ROLES_XEM_MOI_HO_SO

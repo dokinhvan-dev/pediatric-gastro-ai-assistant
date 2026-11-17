@@ -1,0 +1,18 @@
+# Dependabot mo PR khi thu vien Python (uv.lock) hoac GitHub Actions co ban va loi hay ban moi.
+# Gioi han so PR mo cung luc de khong ngop; PR cua Dependabot cung phai qua workflow Security.
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "Update"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "Update"
