@@ -2,11 +2,11 @@
 
 Đồ án môn học *Đồ án cơ sở trong khoa học dữ liệu* (HK 261, 2026): backend và trợ lý hội thoại cho hệ thống hỗ trợ theo dõi tiêu hoá ở trẻ nhỏ.
 - Phụ huynh tải ảnh phân của bé lên.
-- Ảnh được phân loại theo thang **BITSS** (Brussels Infant and Toddler Stool Scale).
+- Trong demo, worker dùng mô hình giả để tạo dự đoán theo thang **BITSS** (Brussels Infant and Toddler Stool Scale).
 - Bác sĩ duyệt và chốt kết luận.
 - Trợ lý hội thoại dùng Google Gemini giải thích kết quả, và chỉ dựa trên hồ sơ của chính gia đình đang hỏi.
 
-Mô hình học sâu phân loại ảnh và XAI thuộc repo riêng của thành viên khác trong nhóm.
+Phần đồ án này tập trung vào backend, trợ lý hội thoại và đánh giá trên dữ liệu tự tạo. Huấn luyện mô hình ảnh và XAI nằm ngoài phạm vi trình diễn.
 
 ## Trạng thái hiện tại
 
@@ -18,8 +18,8 @@ Phạm vi nghiệm thu của đồ án là thiết kế phần mềm, kiểm th�
   - chặn phán quyết phân luồng;
   - lưới cảnh báo dấu hiệu nguy hiểm;
   - chuẩn hoá về văn bản thường.
-- **Kiểm thử:** 549 kiểm tra tự động, không cần mạng hay khoá API, trong đó có ma trận phân quyền: mọi route của API × bốn vai (phụ huynh chủ hồ sơ, phụ huynh khác, bác sĩ, ẩn danh), kèm kiểm tra route mới thêm mà chưa khai vào ma trận thì trượt. Có thêm 17 bài regression cho cổng đột biến và migration. Workflow Security chạy pip-audit, Ruff có luật S, gitleaks, kiểm thử và đủ 66 đột biến ở mỗi lần push; log/JSON đột biến được lưu thành artifact theo SHA.
-- **Đường nối với mô hình phân loại ảnh đã có, chờ checkpoint.** Worker `scripts/worker_suy_luan.py` lấy ca đang chờ, tải ảnh, chạy mô hình và ghi kết quả qua các endpoint dành cho worker (xác thực bằng `X-Service-Token`). Mô hình của phần mô hình ảnh trả 7 xác suất Type_1..Type_7; `app/services/quy_doi_nhan.py` cộng chúng theo nhóm BITSS (BSFS 1–3, 4, 5–6, 7). Luồng đầy đủ đã được kiểm bằng mô hình giả; chạy với mô hình thật cần checkpoint huấn luyện bằng repo mô hình ảnh (chưa có).
+- **Kiểm thử:** 550 kiểm tra tự động, không cần mạng hay khoá API, trong đó có ma trận phân quyền: mọi route của API × bốn vai (phụ huynh chủ hồ sơ, phụ huynh khác, bác sĩ, ẩn danh), kèm kiểm tra route mới thêm mà chưa khai vào ma trận thì trượt. Có thêm 17 bài regression cho cổng đột biến và migration. Workflow Security chạy pip-audit, Ruff có luật S, gitleaks, kiểm thử và đủ 66 đột biến ở mỗi lần push; log/JSON đột biến được lưu thành artifact theo SHA.
+- **Worker suy luận:** lấy ca đang chờ, tải ảnh và ghi kết quả qua các endpoint xác thực bằng `X-Service-Token`. Worker mô hình giả sinh 7 xác suất để diễn tập cách backend gộp chúng thành 4 nhóm BITSS. Đã kiểm luồng tải ảnh, ghi dự đoán, bác sĩ duyệt và [phục hồi thủ công sau khi worker dừng giữa chừng](docs/PHUC_HOI_WORKER.md).
 - **Đánh giá trên Gemini thật đã đo xong** (24/09–04/10/2026, kéo dài nhiều ngày vì hạn mức của gói miễn phí): 4 mô hình × 8 kịch bản × 3 lượt. `gemini-3.6-flash`, `gemini-3.7-flash` và `gemini-3.8-flash` đạt cả 24/24 cặp (kịch bản, lượt); `gemini-3.5-flash-lite` đạt 21/24, cả ba lần trượt đều ở phép kiểm an toàn. Mô hình mặc định vẫn là `gemini-3.6-flash`, vì hai bản mới hơn bị từ chối do quá tải ở khoảng 57% số lần gọi so với 13%. Đợt đo chạy trên mã trước các bản sửa ngày 05/10 và 08/10, chưa đo lại. Kết quả thô nằm trong `outputs/ket_qua_llm/`; quy ước tên tệp và cách tổng hợp ghi trong [`outputs/ket_qua_llm/README.md`](outputs/ket_qua_llm/README.md).
 - **Mọi dữ liệu trong repo là dữ liệu kiểm thử tự tạo.** Không có dữ liệu bệnh nhân thật.
 
@@ -55,7 +55,7 @@ pediatric-gastro-ai-assistant/
 │   ├── token_worker.py      # Cấp / thu hồi / liệt kê token riêng của từng worker suy luận
 │   └── worker_suy_luan.py   # Worker suy luận: hàng chờ -> ảnh -> mô hình -> ghi kết quả
 ├── tests/
-│   ├── verify_task.py       # 549 kiểm tra tự động (47 mục), chạy trên DB và thư mục tạm
+│   ├── verify_task.py       # 550 kiểm tra tự động (48 mục), chạy trên DB và thư mục tạm
 │   ├── test_cong_dot_bien.py # Regression: crash, thiếu test, mã thoát, baseline hỏng, JSON/log
 │   └── test_migration.py    # DB mới/cũ, giữ dữ liệu, chạy lặp, rollback và CLI lỗi
 ├── docs/
@@ -142,11 +142,9 @@ Thu hồi bằng `thu-hoi --id <id>`, xem danh sách bằng `liet-ke`. Mô hình
 uv run python scripts/worker_suy_luan.py --mo-hinh gia --mot-lan
 ```
 
-Mô hình thật của phần mô hình ảnh (cần cài PyTorch, torchvision, PyYAML, pandas theo `requirements.txt` của repo đó; worker chỉ đọc repo này, kiểm `class_names` của checkpoint là đúng Type_1..Type_7):
+Khi demo báo cáo, dùng một hồ sơ tự tạo. Tải ảnh, chạy worker giả, xem dự đoán BITSS, rồi dùng tài khoản bác sĩ duyệt ca. Ghi rõ đầu ra mô hình là dữ liệu minh hoạ. Nếu minh hoạ lỗi worker, thực hiện theo [quy trình phục hồi ca](docs/PHUC_HOI_WORKER.md).
 
-```bash
-uv run python scripts/worker_suy_luan.py --mo-hinh tien --repo-mo-hinh <đường dẫn repo mô hình ảnh> --checkpoint <repo>/outputs/checkpoints/best.pt
-```
+Mốc mã ứng dụng cho demo là `c7408c1` trên nhánh `security`. Bản kiểm thử ở mốc W02 có 549 phép kiểm. Đợt diễn tập W05 dùng cùng mã ứng dụng và bổ sung mục 48a để kiểm chứng phục hồi worker.
 
 ## Kiểm thử
 
@@ -154,7 +152,7 @@ uv run python scripts/worker_suy_luan.py --mo-hinh tien --repo-mo-hinh <đườn
 uv run python tests/verify_task.py
 ```
 
-Bộ kiểm tra tự dựng database tạm và mô hình giả. Nó không cần mạng, không cần khoá API, và không đụng vào `data/`. Kết quả mong đợi là `549/549 PASS`.
+Bộ kiểm tra tự dựng database tạm và mô hình giả. Nó không cần mạng, không cần khoá API, và không đụng vào `data/`. Kết quả mong đợi là `550/550 PASS`.
 
 Để đo chất lượng của chính bộ kiểm tra, chạy kiểm thử đột biến. Script đóng băng bản sao nguồn rồi chèn từng lỗi trong 66 lỗi nhỏ vào các bản sao tạm; chạy bản gốc trước, chỉ tiếp tục nếu bản gốc đạt. Mỗi lượt phải chạy đủ cùng danh sách kiểm tra mới được phân loại. Thời gian phụ thuộc máy và số tiến trình.
 
@@ -217,7 +215,7 @@ Mỗi tệp kết quả JSON ghi kèm model, thời điểm chạy, mã băm SHA
 - Endpoint đăng ký trả 409 cho email đã có tài khoản và 201 cho email mới, nên dò được một email đã đăng ký hay chưa; hạn mức 5 lần/10 phút/IP chỉ làm chậm việc dò. Chưa có xác minh email, đổi/quên mật khẩu và xoá tài khoản.
 - W02 loại trường tên bé trong hồ sơ khỏi công cụ LLM, thay bằng bí danh từ child_id. Lịch sử trước W02 không được nạp lại; lịch sử mới vẫn nhớ các lượt sau. Tên người dùng tự gõ và nội dung lời dặn bác sĩ vẫn có thể đi tới mô hình: đây là giảm dữ liệu theo nguồn, không phải ẩn danh hoàn toàn. Xem [phạm vi và nâng cấp W02](docs/W02_GIAM_TEN_GUI_LLM.md).
 - Lớp cảnh báo dấu hiệu nguy hiểm khớp theo chuỗi: không hiểu phủ định, thành ngữ hay điều kiện tuổi. Danh sách dấu hiệu và ngưỡng độ tự tin 0,70 chưa được bác sĩ thẩm định.
-- Nếu worker suy luận dừng đột ngột khi đang xử lý, ca nằm lại ở `processing`: chưa có hạn giờ tự đưa về `queued`, phải gọi `inference-failed` rồi `inference-retry`.
+- Nếu worker dừng đột ngột, ca vẫn ở `processing` cho đến khi người vận hành chạy [quy trình phục hồi thủ công](docs/PHUC_HOI_WORKER.md).
 - Nhật ký kiểm toán chưa có giao diện đọc (chỉ truy vấn trực tiếp database) và chưa có thời hạn lưu trữ; trigger chặn sửa/xoá chỉ viết cho SQLite. Danh sách (`GET /api/v1/records`, `GET /api/v1/children`) chưa được ghi từng lượt xem.
 - Gói Gemini miễn phí chỉ phục vụ được vài lượt chat mỗi ngày và không phù hợp với dữ liệu y tế thật; hạn mức gọi API chỉ lưu trong bộ nhớ của từng tiến trình.
 
@@ -232,6 +230,5 @@ Nhóm tự xác định yêu cầu và chọn phương án. Mọi kết quả đ
 ## Tác giả
 
 - **Đỗ Kinh Văn** (MSSV 2413917): backend, trợ lý hội thoại, kiểm thử, đánh giá.
-- **Nguyễn Gia Tiến**: mô hình phân loại ảnh theo BITSS và XAI (repo riêng).
 
 Giảng viên hướng dẫn: Lê Xuân Đại.

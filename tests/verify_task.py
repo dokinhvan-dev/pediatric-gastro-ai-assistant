@@ -7980,6 +7980,107 @@ check("47h) Rut dong thuan chan ca tool bi danh va lich su moi",
       goi_tool(_P_CHA_24, "tra_cuu_ho_so_be", _A47) == KHONG_CO_TOOL
       and "error" in agent_service._ho_so_be(_P_CHA_24, _A47) and _consent_history47 == [])
 
+# =====================================================================
+# 48. DIEN TAP PHUC HOI CA KET PROCESSING (W05)
+# =====================================================================
+print("\n--- 48. Phuc hoi thu cong sau khi worker dung dot ngot ---")
+
+
+def dien_tap_phuc_hoi_worker():
+    record_id = new_queued_record()
+    with SessionLocal() as db:
+        token_cu, worker_cu = _token_worker.cap(db, "w05-worker-dung")
+        token_van_hanh, worker_van_hanh = _token_worker.cap(db, "w05-phuc-hoi")
+        token_moi, worker_moi = _token_worker.cap(db, "w05-worker-chay-lai")
+        db.commit()
+        cac_id = (worker_cu.id, worker_van_hanh.id, worker_moi.id)
+
+    # Chay trong tien trinh con de os._exit dung that, sau khi da nhan va tai anh.
+    # TestClient gui request den app va cung dung DB/thu muc anh tam cua bo test.
+    chuong_trinh = """
+import os
+import sys
+from fastapi.testclient import TestClient
+from main import app
+from scripts.worker_suy_luan import xu_ly_mot_ca
+
+class MoHinhDungDotNgot:
+    def du_doan(self, anh):
+        os._exit(73)
+
+with TestClient(app, headers={"X-Service-Token": os.environ["INFERENCE_SERVICE_TOKEN"]}) as client:
+    xu_ly_mot_ca(client, int(sys.argv[1]), MoHinhDungDotNgot())
+"""
+    tien_trinh = _subprocess.run(
+        [sys.executable, "-c", chuong_trinh, str(record_id)],
+        env={**os.environ, "INFERENCE_SERVICE_TOKEN": token_cu},
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30,
+    )
+    if tien_trinh.returncode != 73:
+        return False, f"Worker thoat ma {tien_trinh.returncode}: {tien_trinh.stderr[-800:]}"
+
+    def doc_trang_thai():
+        with SessionLocal() as db:
+            ca = db.get(StoolRecord, record_id)
+            return ca.inference_status, ca.inference_error, ca.ai_predicted_class, ca.ai_confidence
+
+    truoc = doc_trang_thai()
+    url = f"/api/v1/records/{record_id}"
+    ly_do = {"error": "W05: worker da dung truoc khi ghi ket qua"}
+    header_van_hanh = {"X-Service-Token": token_van_hanh}
+    header_moi = {"X-Service-Token": token_moi}
+    cam = (
+        client.post(f"{url}/inference-failed", json=ly_do).status_code,
+        client.post(f"{url}/inference-failed", json=ly_do, headers=PARENT_H).status_code,
+        client.post(f"{url}/inference-retry", headers=DOCTOR_H).status_code,
+        client.post(f"{url}/inference-retry", headers=header_van_hanh).status_code,
+    )
+    sau_cam = doc_trang_thai()
+    bao_loi = client.post(f"{url}/inference-failed", json=ly_do, headers=header_van_hanh)
+    sau_loi = doc_trang_thai()
+    thu_lai = client.post(f"{url}/inference-retry", headers=header_van_hanh)
+    sau_thu_lai = doc_trang_thai()
+    with TestClient(app, headers=header_moi) as worker:
+        ket_qua = _wk41.xu_ly_mot_ca(worker, record_id, _wk41.BoPhanLoaiGia())
+    sau_xong = doc_trang_thai()
+    cam_sua = (
+        client.post(f"{url}/inference-failed", json=ly_do, headers=header_van_hanh).status_code,
+        client.post(f"{url}/inference-retry", headers=header_van_hanh).status_code,
+    )
+
+    with SessionLocal() as db:
+        nhat_ky = [
+            (dong.actor_worker_id, dong.actor_role, dong.action, dong.detail, dong.outcome)
+            for dong in _nk.doc_theo_doi_tuong(db, "record", record_id)
+            if dong.actor_role == "worker" and dong.action != _nk.WORKER_LAY_ANH
+        ]
+    cu, van_hanh, moi = cac_id
+    mong_doi = [
+        (cu, "worker", _nk.WORKER_BAT_DAU, "queued->processing", "success"),
+        (van_hanh, "worker", _nk.WORKER_BAO_LOI, "processing->failed", "success"),
+        (van_hanh, "worker", _nk.WORKER_THU_LAI, "failed->queued", "success"),
+        (moi, "worker", _nk.WORKER_BAT_DAU, "queued->processing", "success"),
+        (moi, "worker", _nk.WORKER_GHI_KET_QUA, "processing->completed", "success"),
+    ]
+    dat = (
+        truoc == sau_cam == ("processing", None, None, None)
+        and cam == (401, 401, 401, 409)
+        and bao_loi.status_code == thu_lai.status_code == 200
+        and sau_loi == ("failed", ly_do["error"], None, None)
+        and sau_thu_lai == ("queued", None, None, None)
+        and ket_qua == "xong"
+        and sau_xong == doc_trang_thai() == ("completed", None, 2, 0.8)
+        and cam_sua == (409, 409) and nhat_ky == mong_doi
+    )
+    return dat, (f"truoc={truoc} cam={cam} bao_loi={bao_loi.status_code} {sau_loi} "
+                 f"thu_lai={thu_lai.status_code} {sau_thu_lai} xong={sau_xong} "
+                 f"cam_sua={cam_sua} ket_qua={ket_qua} nhat_ky={nhat_ky}")
+
+
+_dat48, _chi_tiet48 = dien_tap_phuc_hoi_worker()
+check("48a) Worker dung that, dua ca ve hang cho, kiem quyen/audit va giu completed",
+      _dat48, _chi_tiet48)
+
 print("\n--- TONG KET ---")
 failed = [r for r in results if r[1] == "FAIL"]
 for name, status, detail in results:
