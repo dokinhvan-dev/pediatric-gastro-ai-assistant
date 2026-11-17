@@ -146,6 +146,8 @@ Khi demo báo cáo, dùng một hồ sơ tự tạo. Tải ảnh, chạy worker 
 
 Mốc mã ứng dụng cho demo là `c7408c1` trên nhánh `security`. Bản kiểm thử ở mốc W02 có 549 phép kiểm. Đợt diễn tập W05 dùng cùng mã ứng dụng và bổ sung mục 48a để kiểm chứng phục hồi worker.
 
+[Kịch bản demo, quy trình chuẩn bị tập câu độc lập và lệnh đo lại Gemini](docs/DANH_GIA_VA_DEMO.md)
+
 ## Kiểm thử
 
 ```bash

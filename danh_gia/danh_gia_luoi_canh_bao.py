@@ -19,9 +19,13 @@ GIỚI HẠN CẦN NÓI RÕ KHI TRÍCH SỐ LIỆU TỪ ĐÂY:
   - Tập nhỏ (vài chục câu), không có tin nhắn của phụ huynh thật.
   - Các câu dễ gây nhầm được CỐ Ý đưa vào nhiều hơn tỉ lệ tự nhiên, để làm lộ điểm yếu.
 """
+import argparse
+import hashlib
 import json
 import os
 import sys
+import unicodedata
+from pathlib import Path
 
 GOC = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, GOC)
@@ -137,41 +141,90 @@ def chi_so(du_doan, nhan) -> dict:
     r = tp / (tp + fn) if tp + fn else 0.0
     f1 = 2 * p * r / (p + r) if p + r else 0.0
     return {"tp": tp, "fp": fp, "fn": fn, "tn": tn, "precision": p, "recall": r,
-            "f1": f1, "accuracy": (tp + tn) / len(nhan)}
+            "f1": f1, "accuracy": (tp + tn) / len(nhan) if nhan else None}
 
 
-def danh_gia() -> dict:
-    ket = {"so_cau": len(TAP_CAU), "so_duong_tinh": sum(n for _, n, _ in TAP_CAU),
-           "so_co_dau": sum(1 for t, _, _ in TAP_CAU if co_dau(t)), "chien_luoc": {}}
+def danh_gia(tap_cau=TAP_CAU) -> dict:
+    ket = {"so_cau": len(tap_cau), "so_duong_tinh": sum(n for _, n, _ in tap_cau),
+           "so_co_dau": sum(1 for t, _, _ in tap_cau if co_dau(t)), "chien_luoc": {}}
     for ten, ham in CHIEN_LUOC.items():
         muc = {}
         for nhom, loc in (("tat_ca", lambda t: True), ("co_dau", co_dau),
                           ("khong_dau", lambda t: not co_dau(t))):
-            tap = [(t, n) for t, n, _ in TAP_CAU if loc(t)]
+            tap = [(t, n) for t, n, _ in tap_cau if loc(t)]
             muc[nhom] = chi_so([ham(t) for t, _ in tap], [n for _, n in tap])
         muc["loi"] = [
             {"tin_nhan": t, "nhan": n, "du_doan": int(ham(t)), "ghi_chu": g}
-            for t, n, g in TAP_CAU if bool(ham(t)) != bool(n)
+            for t, n, g in tap_cau if bool(ham(t)) != bool(n)
         ]
         ket["chien_luoc"][ten] = muc
     return ket
 
 
-if __name__ == "__main__":
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    kq = danh_gia()
+def doc_tap_cau(tep: Path) -> tuple[list, str]:
+    noi_dung = tep.read_bytes()
+    cac_dong = json.loads(noi_dung.decode("utf-8-sig"))
+    if not isinstance(cac_dong, list) or not cac_dong:
+        raise ValueError("Tập câu phải là mảng JSON có ít nhất một câu.")
+    tap_cau = []
+    da_co = {unicodedata.normalize("NFC", t).strip().casefold() for t, _, _ in TAP_CAU}
+    for so, dong in enumerate(cac_dong, 1):
+        if not isinstance(dong, dict):
+            raise ValueError(f"Câu {so} phải là một đối tượng JSON.")
+        tin = dong.get("tin_nhan")
+        nhan = dong.get("nhan")
+        ghi_chu = dong.get("ghi_chu", "")
+        if not isinstance(tin, str) or not tin.strip() or type(nhan) is not int or nhan not in (0, 1):
+            raise ValueError(f"Câu {so} cần tin_nhan và nhãn nguyên 0 hoặc 1.")
+        if not isinstance(ghi_chu, str):
+            raise ValueError(f"ghi_chu của câu {so} phải là văn bản.")
+        khoa = unicodedata.normalize("NFC", tin).strip().casefold()
+        if khoa in da_co:
+            raise ValueError(f"Câu {so} trùng trong tập mới hoặc trùng tập 67 câu.")
+        da_co.add(khoa)
+        tap_cau.append((tin, nhan, ghi_chu))
+    if {nhan for _, nhan, _ in tap_cau} != {0, 1}:
+        raise ValueError("Tập đánh giá cần cả hai nhãn 0 và 1.")
+    return tap_cau, hashlib.sha256(noi_dung).hexdigest()
+
+
+def main():
+    parser = argparse.ArgumentParser(description="So sánh ba cách phát hiện tín hiệu cảnh báo.")
+    parser.add_argument("--tap-cau", type=Path, help="Tập JSON có nhãn để đánh giá thay tập 67 câu.")
+    parser.add_argument("--ghi-ket-qua", type=Path, help="Đường dẫn mới để ghi kết quả.")
+    args = parser.parse_args()
+    if args.tap_cau and not args.ghi_ket_qua:
+        parser.error("--tap-cau cần --ghi-ket-qua để lưu riêng kết quả.")
+    if args.ghi_ket_qua and args.ghi_ket_qua.exists():
+        parser.error("--ghi-ket-qua phải trỏ tới tệp chưa tồn tại.")
+    if args.tap_cau:
+        try:
+            tap_cau, sha256 = doc_tap_cau(args.tap_cau)
+        except (ValueError, OSError) as exc:
+            parser.error(str(exc))
+        kq = danh_gia(tap_cau)
+        kq["sha256_tap_cau"] = sha256
+    else:
+        kq = danh_gia()
     print(f"Tap cau: {kq['so_cau']} cau, {kq['so_duong_tinh']} duong tinh, {kq['so_co_dau']} cau co dau")
     for ten, muc in kq["chien_luoc"].items():
         print(f"\n== {ten}")
         for nhom in ("tat_ca", "co_dau", "khong_dau"):
             m = muc[nhom]
+            if m["accuracy"] is None:
+                print(f"  {nhom:9} không có câu")
+                continue
             print(f"  {nhom:9} P={m['precision']:.3f} R={m['recall']:.3f} F1={m['f1']:.3f} "
                   f"Acc={m['accuracy']:.3f}  (TP={m['tp']} FP={m['fp']} FN={m['fn']} TN={m['tn']})")
         for ca_sai in muc["loi"]:
             loai = "FP" if ca_sai["du_doan"] else "FN"
             print(f"    {loai}: {ca_sai['tin_nhan']}  [{ca_sai['ghi_chu']}]")
-    goc_du_an = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    duong_dan = os.path.join(goc_du_an, "outputs", "ket_qua_luoi_canh_bao.json")
-    with open(duong_dan, "w", encoding="utf-8") as f:
+    duong_dan = args.ghi_ket_qua or Path(GOC) / "outputs" / "ket_qua_luoi_canh_bao.json"
+    with duong_dan.open("x" if args.ghi_ket_qua else "w", encoding="utf-8") as f:
         json.dump(kq, f, ensure_ascii=False, indent=1)
     print(f"\nDa ghi {duong_dan}")
+
+
+if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    main()
