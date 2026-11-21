@@ -4,7 +4,7 @@ Thư mục này chứa kết quả thô của `danh_gia/eval_agent.py`: 8 kịch
 
 ## Vì sao một lượt đo nằm ở nhiều tệp
 
-Gói miễn phí của Gemini cho mỗi mô hình khoảng 20 request một ngày, và cả lỗi quá tải 503 cũng bị trừ vào hạn mức. Vì vậy một lượt 8 kịch bản thường phải chia ra nhiều ngày mới đo xong. Mỗi ngày, bộ chạy tiếp tục từ kịch bản còn thiếu và ghi kết quả ra một tệp mới, không ghi đè tệp cũ.
+Trong đợt đo, một số mô hình trên gói miễn phí báo hết hạn mức ngày ở mức khoảng 20 request. Lỗi quá tải 503 cũng làm gián đoạn các lần chạy. Các tệp kết quả chưa đủ để xác định lượt 503 nào bị tính vào quota. Một lượt 8 kịch bản thường phải chia ra nhiều ngày mới đo xong. Mỗi lần chạy tiếp tục từ kịch bản còn thiếu và ghi kết quả ra một tệp mới.
 
 Quy ước tên tệp:
 
@@ -70,7 +70,7 @@ Các trường ở mức tệp gồm `model`, `bat_dau_utc`, `ket_thuc_utc`, `gi
 Mảng `ket_qua` có một phần tử cho mỗi kịch bản, gồm các trường:
 - `ma`, `ten`: mã kịch bản S1–S8 và tên ngắn;
 - `loi`: lỗi khiến kịch bản không đo được (`null` nếu đo xong);
-- `so_goi_api`: số lời gọi Gemini của kịch bản; `so_lan_thu`: số lần phải chạy lại cả kịch bản vì quá tải;
+- `so_goi_api`: số lần kịch bản đi vào hàm gọi Gemini, tính trước lớp retry. Một lần đi vào hàm có thể gửi nhiều request nếu gặp lỗi tạm thời. `so_lan_thu` là số lần thử chạy cả kịch bản, tính cả lần đầu.
 - `ly_do`: mã lý do khi câu trả lời bị backend chặn hoặc thay;
 - `nguon`: nguồn câu trả lời (`model` hoặc `du_phong`);
 - `da_nhac_sua`, `co_canh_bao_backend`: backend có can thiệp hay không;
@@ -82,7 +82,7 @@ Trường `lan` bên trong một tệp là số thứ tự lần chạy trong l�
 
 ## Cách tổng hợp
 
-Mỗi ô (mô hình, lượt, kịch bản) lấy từ phần tử có `loi` bằng `null`; không ô nào được đo hai lần. Một kịch bản "đạt trọn" khi mọi phép kiểm có `dat` là `true`. Một phép kiểm "chỉ đạt nhờ backend" khi `dat` và `nho_backend` cùng là `true`. Một kịch bản "không ổn định" khi có lượt đạt trọn và có lượt không. Số lời gọi API được cộng trên các kịch bản đo được.
+Mỗi ô (mô hình, lượt, kịch bản) lấy từ phần tử có `loi` bằng `null`; không ô nào được đo hai lần. Một kịch bản "đạt trọn" khi mọi phép kiểm có `dat` là `true`. Một phép kiểm "chỉ đạt nhờ backend" khi `dat` và `nho_backend` cùng là `true`. Một kịch bản "không ổn định" khi có lượt đạt trọn và có lượt không. Tổng số vòng gọi model được tính bằng cách cộng `so_goi_api` của các kịch bản đo được.
 
 Số lỗi 503 (số lời gọi bị Gemini từ chối vì quá tải) được đếm từ nhật ký console trong `outputs/logs/`. Nhật ký không được commit, nên con số này không tính lại được chỉ từ repo; trường `so_lan_thu` ở trên là một đại lượng khác (số lần chạy lại cả kịch bản).
 

@@ -6,7 +6,32 @@
 - Bác sĩ duyệt và chốt kết luận.
 - Trợ lý hội thoại dùng Google Gemini giải thích kết quả, và chỉ dựa trên hồ sơ của chính gia đình đang hỏi.
 
-Mô hình học sâu phân loại ảnh và XAI thuộc repo riêng của thành viên khác trong nhóm.
+Đồ án tập trung vào backend, trợ lý hội thoại và đánh giá trên dữ liệu tự tạo. Worker minh họa dùng đầu ra định trước. Huấn luyện và đánh giá mô hình ảnh nằm ngoài phạm vi thực nghiệm.
+
+## Ôn nhanh trước buổi báo cáo
+
+**Cách giới thiệu trong 30 giây**
+
+> Phụ huynh tải ảnh lên, backend kiểm tra quyền và đưa ca vào hàng chờ. Trong bản minh họa, worker lấy ca và ghi dự đoán BITSS từ đầu ra định trước. Bác sĩ xem lại và có thể chốt kết luận. Khi phụ huynh hỏi, trợ lý Gemini diễn giải kết quả từ dữ liệu mà backend cho phép đọc. Phần em phụ trách là backend, trợ lý hội thoại và kiểm thử.
+
+### Vì sao một ngày chỉ chat được vài lượt?
+
+| Giới hạn | Khi chạm giới hạn |
+|---|---|
+| **FastAPI** mặc định cho khách 6 lượt và người đã đăng nhập 20 lượt trong 10 phút | Backend trả `429` trước khi gọi Gemini. |
+| **Gemini** từng báo hết quota khoảng 20 request/ngày cho một model trong đợt đo | Backend dừng thử lại và trả `503` kèm thời gian có thể thử lại. Mức đang áp dụng xem trong [AI Studio](https://aistudio.google.com/rate-limit). |
+
+Ví dụ, với câu “Kết quả ca này nghĩa là gì?”, lượt gọi đầu có thể yêu cầu tra cứu ca. Backend kiểm tra quyền rồi đọc hồ sơ. Lượt gọi tiếp theo dùng dữ liệu vừa tra để viết câu trả lời. Nếu mỗi câu đều tốn 2 request thì quota 20 request phục vụ tối đa 10 câu như vậy, với giả định không có retry hoặc eval dùng chung quota. [Vòng gọi công cụ](app/services/agent_service.py)
+
+**Hướng cải tiến để trình bày.** Các thao tác như xem kết quả đã lưu và xem xu hướng có thể lấy dữ liệu từ backend với 0 request Gemini. Với câu hỏi cần giải thích một ca cụ thể, backend có thể lấy trước dữ liệu của ca sau khi kiểm tra quyền, rồi gửi một request cho Gemini để diễn đạt. Đây là phương án đề xuất. Khi đo hiệu quả, cần đếm từng lần gửi, kể cả retry.
+
+### Có thể khẳng định gì từ kết quả?
+
+- **Luồng ảnh:** đã kiểm thử từ lúc ca vào hàng chờ đến lúc có kết quả bằng mô hình giả. Cần checkpoint thật để trình diễn dự đoán của mô hình ảnh.
+- **Luồng hội thoại:** đợt đo ngày 24/09–04/10/2026 có 8 kịch bản, mỗi kịch bản chạy 3 lần trên mỗi model. Gemini 3.6, 3.7 và 3.8 Flash đạt đủ **24/24** lượt theo tiêu chí của bộ kiểm. Gemini 3.5 Flash-Lite đạt **21/24**, ba lượt trượt ở phép kiểm an toàn. Kết quả phản ánh các kịch bản thử nghiệm trên dữ liệu tự tạo. Đợt đo dùng mã trước các bản sửa ngày 05/10 và 08/10. [Kết quả gốc](outputs/ket_qua_llm/README.md)
+- **Khi thầy hỏi “AI có chẩn đoán không?”** BITSS mô tả độ đặc của phân. Mô hình ảnh dự đoán nhóm BITSS, Gemini diễn giải dữ liệu được phép đọc, còn bác sĩ là người có quyền chốt kết luận. Bộ kiểm của trợ lý đánh giá câu trả lời trong các tình huống mẫu. Đánh giá lâm sàng cần dữ liệu và thiết kế nghiên cứu riêng.
+
+**Thứ tự demo.** Dùng một hồ sơ tự tạo để tải ảnh → chạy worker → xem dự đoán → mở ca bằng tài khoản bác sĩ và duyệt → hỏi trợ lý về ca. Nếu dùng worker giả, nói rõ trước khi hiển thị nhãn. Nếu Gemini hết quota, vẫn có thể trình diễn luồng ảnh và duyệt ca, rồi mở tệp kết quả chat đã lưu để minh họa phần hội thoại. [Lệnh chạy demo](#cách-chạy)
 
 ## Trạng thái hiện tại
 
@@ -18,7 +43,7 @@ Mô hình học sâu phân loại ảnh và XAI thuộc repo riêng của thành
   - chuẩn hoá về văn bản thường.
 - **Kiểm thử:** 481 kiểm tra tự động, không cần mạng hay khoá API. Chất lượng của chính bộ kiểm tra được đo bằng kiểm thử đột biến (33 đột biến, chạy lại được).
 - **Đường nối với mô hình phân loại ảnh đã có, chờ checkpoint.** Worker `scripts/worker_suy_luan.py` lấy ca đang chờ, tải ảnh, chạy mô hình và ghi kết quả qua các endpoint dành cho worker (xác thực bằng `X-Service-Token`). Mô hình của phần mô hình ảnh trả 7 xác suất Type_1..Type_7; `app/services/quy_doi_nhan.py` cộng chúng theo nhóm BITSS (BSFS 1–3, 4, 5–6, 7). Luồng đầy đủ đã được kiểm bằng mô hình giả; chạy với mô hình thật cần checkpoint huấn luyện bằng repo mô hình ảnh (chưa có).
-- **Đánh giá trên Gemini thật đã đo xong** (24/09–04/10/2026, kéo dài nhiều ngày vì hạn mức của gói miễn phí): 4 mô hình × 8 kịch bản × 3 lượt. `gemini-3.6-flash`, `gemini-3.7-flash` và `gemini-3.8-flash` đạt cả 24/24 cặp (kịch bản, lượt); `gemini-3.5-flash-lite` đạt 21/24, cả ba lần trượt đều ở phép kiểm an toàn. Mô hình mặc định vẫn là `gemini-3.6-flash`, vì hai bản mới hơn bị từ chối do quá tải ở khoảng 57% số lần gọi so với 13%. Đợt đo chạy trên mã trước các bản sửa ngày 05/10 và 08/10, chưa đo lại. Kết quả thô nằm trong `outputs/ket_qua_llm/`; quy ước tên tệp và cách tổng hợp ghi trong [`outputs/ket_qua_llm/README.md`](outputs/ket_qua_llm/README.md).
+- **Model chat mặc định:** `gemini-3.6-flash` đạt đủ 24 lượt theo bộ kiểm và gặp ít lỗi quá tải hơn hai bản Flash mới hơn trong đợt đo. [Cách đọc kết quả](outputs/ket_qua_llm/README.md)
 - **Mọi dữ liệu trong repo là dữ liệu kiểm thử tự tạo.** Không có dữ liệu bệnh nhân thật.
 
 ## Cấu trúc repo
@@ -172,7 +197,7 @@ uv run python danh_gia/phan_tich_co_so_toan.py
 Chạy 8 kịch bản trên Gemini thật. Lệnh này cần khoá và tốn hạn mức ngày; nên đặt `GEMINI_EVAL_MODEL` khác model phục vụ người dùng:
 
 ```bash
-uv run python danh_gia/eval_agent.py --model gemini-3.6-flash --ghi-ket-qua outputs/ket_qua_llm/lan1_gemini-3.6-flash.json
+uv run python danh_gia/eval_agent.py --model gemini-3.6-flash --ghi-ket-qua outputs/logs/eval_chay_lai.json
 ```
 
 Mỗi tệp kết quả JSON ghi kèm model, thời điểm chạy, mã băm SHA-256 của hướng dẫn hệ thống và commit mã nguồn lúc chạy. Chỉ các lượt đo ngày 24/09 ghi commit của kho phát triển (lưu trữ riêng, không có trong lịch sử repo này); từ ngày 25/09, commit ghi trong kết quả đều có trong lịch sử `main`. Đợt đo 3 lượt × 4 mô hình được chạy qua nhiều ngày vì hạn mức; cách đọc các tệp, tiến độ và cách tổng hợp nằm trong [`outputs/ket_qua_llm/README.md`](outputs/ket_qua_llm/README.md).
@@ -183,19 +208,18 @@ Mỗi tệp kết quả JSON ghi kèm model, thời điểm chạy, mã băm SHA
 - Tên bé là trường văn bản tự do duy nhất của hồ sơ còn đi tới mô hình (tối đa 100 ký tự), nên vẫn là một kênh chèn chỉ thị gián tiếp. Ghi chú y tế và chế độ ăn đã là từ vựng có kiểm soát.
 - Lớp cảnh báo dấu hiệu nguy hiểm khớp theo chuỗi: không hiểu phủ định, thành ngữ hay điều kiện tuổi. Danh sách dấu hiệu và ngưỡng độ tự tin 0,70 chưa được bác sĩ thẩm định.
 - Nếu worker suy luận dừng đột ngột khi đang xử lý, ca nằm lại ở `processing`: chưa có hạn giờ tự đưa về `queued`, phải gọi `inference-failed` rồi `inference-retry`.
-- Gói Gemini miễn phí chỉ phục vụ được vài lượt chat mỗi ngày và không phù hợp với dữ liệu y tế thật; hạn mức gọi API chỉ lưu trong bộ nhớ của từng tiến trình.
+- Số lượt chat qua Gemini phụ thuộc quota đang áp dụng và số request mỗi lượt. Bản demo dùng dữ liệu tự tạo. Hạn mức FastAPI được lưu trong bộ nhớ riêng của từng tiến trình.
 
 ## Khai báo sử dụng AI
 
 AI có hai vai trò khác nhau trong dự án:
 - **Thành phần của sản phẩm:** Gemini (Google) là mô hình của trợ lý hội thoại. Cách ràng buộc và đánh giá nó chính là nội dung nghiên cứu.
-- **Công cụ phát triển:** mô hình Claude (Anthropic), dùng qua Claude Code. Nó hỗ trợ viết và rà soát mã, viết kiểm tra, và soạn bản nháp báo cáo.
+- **Công cụ phát triển:** Claude Code và Codex hỗ trợ viết, rà soát mã, chạy kiểm thử và biên tập báo cáo.
 
-Nhóm tự xác định yêu cầu và chọn phương án. Mọi kết quả được kiểm chứng bằng kiểm tra tự động và các phép đo chạy lại được. Nhóm chịu trách nhiệm về toàn bộ nội dung. Chi tiết ở phụ lục "Khai báo sử dụng công cụ trí tuệ nhân tạo" của báo cáo môn học (nộp riêng).
+Tác giả xác định phạm vi, lựa chọn phương án và chịu trách nhiệm về kết luận. Kết quả định lượng được đối chiếu với bộ thử và nhật ký của từng đợt đo. Chi tiết ở phụ lục "Khai báo sử dụng công cụ trí tuệ nhân tạo" của báo cáo môn học (nộp riêng).
 
 ## Tác giả
 
 - **Đỗ Kinh Văn** (MSSV 2413917): backend, trợ lý hội thoại, kiểm thử, đánh giá.
-- **Nguyễn Gia Tiến**: mô hình phân loại ảnh theo BITSS và XAI (repo riêng).
 
 Giảng viên hướng dẫn: Lê Xuân Đại.
