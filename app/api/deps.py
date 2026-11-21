@@ -23,7 +23,7 @@ from typing import Optional
 from fastapi import Depends, Header, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from setup_database import SessionLocal, User
+from setup_database import SessionLocal, StoolRecord, User
 from app.services import rate_limit, security, token_store
 # Nhập lại và tái xuất để các module đang dùng "from app.api.deps import CurrentUser"
 # không phải đổi: với tầng API thì deps.py vẫn là cửa vào duy nhất của khái niệm danh tính.
@@ -54,13 +54,7 @@ def get_current_user(
         credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
 ) -> CurrentUser:
     """Bắt buộc có token người dùng hợp lệ, và tài khoản phải còn hoạt động."""
-    if credentials is None or not credentials.credentials:
-        raise _unauthorized("Cần đăng nhập để thực hiện thao tác này.")
-
-    try:
-        payload = security.decode_token(credentials.credentials, expected_type=security.TOKEN_TYPE_USER)
-    except security.TokenError as exc:
-        raise _unauthorized(str(exc))
+    payload = get_token_payload(credentials)
 
     try:
         user_id = int(payload["sub"])
@@ -94,17 +88,7 @@ def get_current_user(
 def get_token_payload(
         credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
 ) -> dict:
-    """Trả về payload đã kiểm chữ ký của token đang xuất trình.
-
-    Chỉ endpoint đăng xuất cần tới nó, và chỉ cần đúng một trường: jti. Cố ý KHÔNG mở
-    rộng thành "lấy danh tính từ payload" — vai trò và trạng thái tài khoản vẫn phải tra
-    từ database qua get_current_user, vì payload là ảnh chụp lúc đăng nhập.
-
-    Có giải mã lại một lần nữa so với get_current_user. Đó là chủ ý: gộp hai thứ vào một
-    dependency sẽ khiến mọi endpoint đang dùng get_current_user bỗng cầm luôn payload thô
-    trong tay, và payload thô là thứ rất dễ bị đem ra dùng thay cho dữ liệu đã tra lại.
-    Giá phải trả là một lần giải mã HS256 trên đúng một endpoint.
-    """
+    """Kiểm tra chữ ký và loại token. Đăng xuất dùng jti để thu hồi phiên."""
     if credentials is None or not credentials.credentials:
         raise _unauthorized("Cần đăng nhập để thực hiện thao tác này.")
     try:
@@ -164,28 +148,9 @@ def require_service_token(x_service_token: Optional[str] = Header(default=None))
 def get_optional_principal(
         credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
 ) -> Optional[CurrentUser]:
-    """Đọc danh tính NẾU có, không có thì trả None — dùng cho endpoint mở cho cả người lạ.
-
-    Sau P4 chỉ còn đúng một chỗ cần tới nó: ô chat. Người chưa đăng nhập vẫn hỏi được
-    kiến thức chung về thang BITSS và dấu hiệu cảnh báo, vì phần đó không đọc database,
-    không chứa PII và không có gì để rò. Upload thì ngược lại — đã chuyển sang bắt buộc
-    đăng nhập, xem app/api/records.py.
-
-    Token hỏng vẫn bị từ chối thẳng chứ không âm thầm hạ cấp thành người lạ. Hạ cấp
-    lặng lẽ sẽ biến mọi lỗi hết hạn token thành "trợ lý bỗng dưng không thấy dữ liệu
-    của tôi nữa" — một triệu chứng không ai lần ra nguyên nhân.
-    """
+    """Cho phép chat ẩn danh khi thiếu token. Nếu có token, kiểm tra như yêu cầu đăng nhập."""
     if credentials is None or not credentials.credentials:
         return None
-
-    raw = credentials.credentials
-    try:
-        # expected_type tường minh: token khách vãng lai do các bản trước phát ra vẫn
-        # còn hạn tới 30 ngày và vẫn đúng chữ ký. Không đối chiếu loại thì chúng lọt qua
-        # đây rồi vỡ ở tầng sâu hơn, nơi thông báo lỗi chẳng nói lên điều gì.
-        security.decode_token(raw, expected_type=security.TOKEN_TYPE_USER)
-    except security.TokenError as exc:
-        raise _unauthorized(str(exc))
 
     return get_current_user(credentials)
 
@@ -254,6 +219,13 @@ def chan_neu_qua_han_muc(nhom: str, request, principal, thong_bao: str) -> None:
             detail=thong_bao,
             headers={"Retry-After": str(cho_giay)},
         )
+
+
+def get_record_or_404(db, record_id: int) -> StoolRecord:
+    record = db.query(StoolRecord).filter(StoolRecord.id == record_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail=f"Không tìm thấy ca phân tích có ID: {record_id}")
+    return record
 
 
 def assert_can_view_record(db, record, principal) -> None:

@@ -23,8 +23,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 
-from setup_database import SessionLocal, StoolRecord, DoctorReview
-from app.api.deps import CurrentUser, assert_can_view_record, get_current_user, require_doctor
+from setup_database import SessionLocal, DoctorReview
+from app.api.deps import CurrentUser, assert_can_view_record, get_current_user, get_record_or_404, require_doctor
 from app.services import bitss, nhat_ky_kiem_toan as kiem_toan
 
 router = APIRouter(prefix="/api/v1/records", tags=["Doctor Review"])
@@ -151,23 +151,9 @@ def submit_doctor_review(
     is_final = payload.decision in FINAL_DECISIONS
 
     with SessionLocal() as db:
-        record = db.query(StoolRecord).filter(StoolRecord.id == record_id).first()
-        if not record:
-            raise HTTPException(status_code=404, detail=f"Không tìm thấy ca phân tích có ID: {record_id}")
+        record = get_record_or_404(db, record_id)
 
-        # Không xem được thì không duyệt được. Cố ý gọi lại ĐÚNG hàm mà GET .../reviews
-        # dùng: hai endpoint trên cùng một ca phải kể cùng một câu chuyện về việc ca đó có
-        # tồn tại hay không. Thiếu dòng này thì hồ sơ bé đã xoá mềm biến mất khỏi mọi đường
-        # đọc nhưng vẫn ký được kết luận nếu biết record_id — và nhãn ấy còn mặc định
-        # eligible_for_training, tức dữ liệu người nhà xin xoá đi thẳng vào tập huấn luyện.
-        #
-        # Đặt TRƯỚC kiểm tra inference_status: phân quyền phải trả lời trước mọi bình luận
-        # về trạng thái của ca, nếu không thì một ca 'queued' của bé đã xoá sẽ nhận 409
-        # "chưa có kết quả AI để duyệt" — câu đó tự nó xác nhận ca ấy có thật.
-        #
-        # Các điểm nối của worker suy luận CỐ Ý không có chốt này: chúng hoàn tất công việc
-        # đã xếp hàng từ trước lúc xoá, chặn giữa đường chỉ để lại ca mắc kẹt ở 'processing'
-        # chứ không che thêm được gì — ca đó đã không còn đọc được từ bất cứ đâu.
+        # Kiểm tra quyền trước khi trả trạng thái suy luận để giữ riêng tư cho ca.
         assert_can_view_record(db, record, doctor)
 
         # Chỉ duyệt ca đã có kết quả AI. Đây là quyết định phạm vi có chủ ý: việc bác sĩ
@@ -285,9 +271,7 @@ def list_doctor_reviews(record_id: int, principal: CurrentUser = Depends(get_cur
         mọi người lạ đều nhận đúng một câu trả lời, bất kể record_id có thật hay không.
     """
     with SessionLocal() as db:
-        record = db.query(StoolRecord).filter(StoolRecord.id == record_id).first()
-        if not record:
-            raise HTTPException(status_code=404, detail=f"Không tìm thấy ca phân tích có ID: {record_id}")
+        record = get_record_or_404(db, record_id)
 
         assert_can_view_record(db, record, principal)
         kiem_toan.ghi(db, principal, kiem_toan.XEM_DANH_SACH_DUYET, "record", record.id)

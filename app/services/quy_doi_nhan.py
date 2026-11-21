@@ -74,7 +74,7 @@ def gop_xac_suat(xac_suat_7_loai: Sequence[float]) -> dict:
     if abs(tong - 1.0) > DUNG_SAI_TONG:
         raise ValueError(f"Tổng xác suất phải bằng 1 (sai số {DUNG_SAI_TONG}), nhận {tong:.6f}")
 
-    xac_suat_nhom = {nhom: 0.0 for nhom in sorted(bitss.BITSS_CLASSES)}
+    xac_suat_nhom = dict.fromkeys(sorted(bitss.BITSS_CLASSES), 0.0)
     for i, gia_tri in enumerate(p):
         xac_suat_nhom[BSFS_SANG_NHOM[i + 1]] += gia_tri
     nhom = max(xac_suat_nhom, key=lambda k: (xac_suat_nhom[k], -k))

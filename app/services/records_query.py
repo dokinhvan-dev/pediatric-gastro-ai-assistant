@@ -12,6 +12,7 @@ Vì sao tách ra thành file riêng thay vì viết thẳng trong records.py:
 
 Như authz.py, file này KHÔNG biết gì về HTTP và không ném HTTPException.
 """
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -220,15 +221,12 @@ def gia_tri_p_hoan_vi(day_nhan: list, h: int) -> float:
     n = len(day_nhan)
     tong = sum(day_nhan)
     quan_sat = abs(h * tong - n * sum(day_nhan[:h]))
-    dem = {}
-    for v in day_nhan:
-        dem[v] = dem.get(v, 0) + 1
     # cach[s] = số tập h vị trí có tổng nhãn s, dựng dần theo từng giá trị nhãn.
     cach = {(0, 0): 1}                     # (số phần tử đã chọn, tổng) -> số cách
-    for v, c in dem.items():
+    for v, c in Counter(day_nhan).items():
         moi = {}
         for (k, s), so in cach.items():
-            for j in range(0, min(c, h - k) + 1):
+            for j in range(min(c, h - k) + 1):
                 khoa = (k + j, s + j * v)
                 moi[khoa] = moi.get(khoa, 0) + so * comb(c, j)
         cach = moi
@@ -252,7 +250,7 @@ def nhan_da_duyet(db, record_ids) -> dict:
         )
         .all()
     )
-    return {rid: nhan for rid, nhan in rows}
+    return dict(rows)
 
 
 def _vi_tri_trung_binh(nhan_list):

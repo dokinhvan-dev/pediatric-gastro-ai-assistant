@@ -59,6 +59,16 @@ class TokenOut(BaseModel):
     role: str
 
 
+def _issue_token(user: User) -> TokenOut:
+    return TokenOut(
+        access_token=security.create_user_token(user.id, user.role),
+        expires_in_hours=security.ACCESS_TOKEN_EXPIRE_HOURS,
+        user_id=user.id,
+        full_name=user.full_name,
+        role=user.role,
+    )
+
+
 def _normalize_email(raw: str) -> str:
     """Chuẩn hoá email về chữ thường.
 
@@ -136,13 +146,7 @@ def register(payload: RegisterIn, request: Request):
             db.rollback()
             raise HTTPException(status_code=500, detail="Không thể tạo tài khoản, vui lòng thử lại.")
 
-        return TokenOut(
-            access_token=security.create_user_token(user.id, user.role),
-            expires_in_hours=security.ACCESS_TOKEN_EXPIRE_HOURS,
-            user_id=user.id,
-            full_name=user.full_name,
-            role=user.role,
-        )
+        return _issue_token(user)
 
 
 @router.post("/login", response_model=TokenOut)
@@ -210,13 +214,7 @@ def login(payload: LoginIn, request: Request):
         kiem_toan.ghi_rieng(CurrentUser(id=user.id, email=user.email, full_name=user.full_name, role=user.role),
                             kiem_toan.DANG_NHAP, "user", user.id)
 
-        return TokenOut(
-            access_token=security.create_user_token(user.id, user.role),
-            expires_in_hours=security.ACCESS_TOKEN_EXPIRE_HOURS,
-            user_id=user.id,
-            full_name=user.full_name,
-            role=user.role,
-        )
+        return _issue_token(user)
 
 
 @router.post("/logout")

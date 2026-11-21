@@ -219,15 +219,15 @@ Mỗi tệp kết quả JSON ghi kèm model, thời điểm chạy, mã băm SHA
 - Lớp cảnh báo dấu hiệu nguy hiểm khớp theo chuỗi: không hiểu phủ định, thành ngữ hay điều kiện tuổi. Danh sách dấu hiệu và ngưỡng độ tự tin 0,70 chưa được bác sĩ thẩm định.
 - Nếu worker dừng đột ngột, ca vẫn ở `processing` cho đến khi người vận hành chạy [quy trình phục hồi thủ công](docs/PHUC_HOI_WORKER.md).
 - Nhật ký kiểm toán chưa có giao diện đọc (chỉ truy vấn trực tiếp database) và chưa có thời hạn lưu trữ; trigger chặn sửa/xoá chỉ viết cho SQLite. Danh sách (`GET /api/v1/records`, `GET /api/v1/children`) chưa được ghi từng lượt xem.
-- Gói Gemini miễn phí chỉ phục vụ được vài lượt chat mỗi ngày và không phù hợp với dữ liệu y tế thật; hạn mức gọi API chỉ lưu trong bộ nhớ của từng tiến trình.
+- Đợt đo lịch sử ghi nhận hạn mức khoảng 20 yêu cầu/ngày trên một số cấu hình Gemini. Số lượt chat phụ thuộc số lần gửi cho mỗi câu hỏi. Bộ đếm lượt chat của backend nằm trong bộ nhớ từng tiến trình. Dữ liệu thử là hồ sơ tự tạo.
 
 ## Khai báo sử dụng AI
 
 AI có hai vai trò khác nhau trong dự án:
 - **Thành phần của sản phẩm:** Gemini (Google) là mô hình của trợ lý hội thoại. Cách ràng buộc và đánh giá nó chính là nội dung nghiên cứu.
-- **Công cụ phát triển:** mô hình Claude (Anthropic), dùng qua Claude Code. Nó hỗ trợ viết và rà soát mã, viết kiểm tra, và soạn bản nháp báo cáo.
+- **Công cụ phát triển:** Claude Code và Codex hỗ trợ viết, rà soát mã, chạy kiểm thử và biên tập báo cáo.
 
-Nhóm tự xác định yêu cầu và chọn phương án. Mọi kết quả được kiểm chứng bằng kiểm tra tự động và các phép đo chạy lại được. Nhóm chịu trách nhiệm về toàn bộ nội dung. Chi tiết ở phụ lục "Khai báo sử dụng công cụ trí tuệ nhân tạo" của báo cáo môn học (nộp riêng).
+Tác giả xác định phạm vi, lựa chọn phương án và chịu trách nhiệm về kết luận. Kết quả định lượng được đối chiếu với bộ thử và nhật ký của từng đợt đo. Chi tiết ở phụ lục "Khai báo sử dụng công cụ trí tuệ nhân tạo" của báo cáo môn học (nộp riêng).
 
 ## Tác giả
 

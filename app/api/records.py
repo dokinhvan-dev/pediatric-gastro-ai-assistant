@@ -15,6 +15,7 @@ from app.api.deps import (
     assert_can_view_record,
     chan_neu_qua_han_muc,
     get_current_user,
+    get_record_or_404,
     require_service_token,
 )
 from app.services import bitss, dong_y_nghien_cuu, lam_sach_anh, records_query, uncertainty
@@ -389,9 +390,7 @@ def _ca_cua_chinh_chu(db, record_id: int, principal) -> StoolRecord:
     Một thông báo 404 duy nhất cho: không tồn tại, không phải của mình, bé đã xoá.
     """
     khong_thay = HTTPException(status_code=404, detail=f"Không tìm thấy ca phân tích có ID: {record_id}")
-    record = db.query(StoolRecord).filter(StoolRecord.id == record_id).first()
-    if not record:
-        raise khong_thay
+    record = get_record_or_404(db, record_id)
     child = db.query(Child).filter(Child.id == record.child_id).first()
     if child and not da_xoa_mem(child) and child.owner_user_id != principal.id:
         kiem_toan.ghi_rieng(principal, kiem_toan.TRUY_CAP_BI_TU_CHOI, "record", record.id,
@@ -475,13 +474,8 @@ def get_record(record_id: int, principal: CurrentUser = Depends(get_current_user
     dòng nào trong mã nguồn.
     """
     with SessionLocal() as db:
-        record = db.query(StoolRecord).filter(StoolRecord.id == record_id).first()
-        if not record:
-            raise HTTPException(status_code=404, detail=f"Không tìm thấy ca phân tích có ID: {record_id}")
+        record = get_record_or_404(db, record_id)
 
-        # Cùng một hàm mà GET .../reviews và đường duyệt của bác sĩ dùng. Đây là đường đọc
-        # thứ tám trong hệ thống, và toàn bộ lý do quy tắc xoá mềm nằm trong authz chứ
-        # không rải ở từng truy vấn là để một endpoint mới như thế này không thể quên nó.
         assert_can_view_record(db, record, principal)
         kiem_toan.ghi(db, principal, kiem_toan.XEM_CA, "record", record.id)
         db.commit()
@@ -545,9 +539,7 @@ def get_record_image(record_id: int, principal: CurrentUser = Depends(get_curren
     cấp bên ngoài, còn ở đây ảnh đi từ máy chủ tới đúng người được phép xem.
     """
     with SessionLocal() as db:
-        record = db.query(StoolRecord).filter(StoolRecord.id == record_id).first()
-        if not record:
-            raise HTTPException(status_code=404, detail=f"Không tìm thấy ca phân tích có ID: {record_id}")
+        record = get_record_or_404(db, record_id)
         assert_can_view_record(db, record, principal)
         kiem_toan.ghi(db, principal, kiem_toan.XEM_ANH, "record", record.id)
         db.commit()
@@ -658,7 +650,7 @@ def worker_hang_cho(
 def worker_lay_anh(record_id: int, worker: WorkerDanhTinh = Depends(require_service_token)):
     """Ảnh của một ca, cho worker suy luận. Chỉ mở khi ca đang queued hoặc processing."""
     with SessionLocal() as db:
-        record = _get_record_or_404(db, record_id)
+        record = get_record_or_404(db, record_id)
         child = db.query(Child).filter(Child.id == record.child_id).first()
         if child is None or da_xoa_mem(child):
             raise HTTPException(status_code=404, detail=f"Không tìm thấy ca phân tích có ID: {record_id}")
@@ -748,13 +740,6 @@ def _chuyen_trang_thai(db, worker: WorkerDanhTinh, record: StoolRecord, target: 
     db.refresh(record)
 
 
-def _get_record_or_404(db, record_id: int) -> StoolRecord:
-    record = db.query(StoolRecord).filter(StoolRecord.id == record_id).first()
-    if not record:
-        raise HTTPException(status_code=404, detail=f"Không tìm thấy ca phân tích có ID: {record_id}")
-    return record
-
-
 class InferenceResultIn(BaseModel):
     ai_predicted_class: int
     ai_confidence: float
@@ -797,7 +782,7 @@ def submit_inference_result(
         )
 
     with SessionLocal() as db:
-        record = _get_record_or_404(db, record_id)
+        record = get_record_or_404(db, record_id)
         _assert_transition(record.inference_status, "completed")
 
         # Uncertainty gating: đánh dấu ca mô hình không chắc chắn để bác sĩ ưu tiên xem.
@@ -845,7 +830,7 @@ def mark_inference_started(record_id: int, worker: WorkerDanhTinh = Depends(requ
     worker đã chết giữa chừng.
     """
     with SessionLocal() as db:
-        record = _get_record_or_404(db, record_id)
+        record = get_record_or_404(db, record_id)
         _assert_transition(record.inference_status, "processing")
 
         try:
@@ -884,7 +869,7 @@ def mark_inference_failed(
         reason = reason[:MAX_ERROR_LENGTH] + " ...(đã cắt bớt)"
 
     with SessionLocal() as db:
-        record = _get_record_or_404(db, record_id)
+        record = get_record_or_404(db, record_id)
         _assert_transition(record.inference_status, "failed")
 
         try:
@@ -922,7 +907,7 @@ def retry_inference(record_id: int, worker: WorkerDanhTinh = Depends(require_ser
     cũng chặn tình huống này ở tầng database).
     """
     with SessionLocal() as db:
-        record = _get_record_or_404(db, record_id)
+        record = get_record_or_404(db, record_id)
         _assert_transition(record.inference_status, "queued")
 
         try:
